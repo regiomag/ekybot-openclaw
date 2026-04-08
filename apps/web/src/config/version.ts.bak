@@ -1,0 +1,2 @@
+export const APP_VERSION = "v0.15.126";
+// BUG FIX CRITIQUE: Agent limits fix - /api/agents/provision now uses correct Team=50 agents limit

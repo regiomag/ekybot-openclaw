@@ -1,0 +1,369 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  clerk
+  supabase
+  workspace
+  system
+}
+
+model User {
+  id            String          @id @default(cuid())
+  authProvider  AuthProvider    @default(clerk)
+  authSubject   String          @unique
+  clerkId       String?         @unique
+  email         String          @unique
+  name          String?
+  imageUrl      String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  profile       AdvisorProfile?
+  gatewayConfig GatewayConfig?
+  apiUsage      ApiUsage[]
+  messages      Message[]
+  sessions      Session[]
+  companionMachines          CompanionMachine[]
+  companionRegistrationTokens CompanionRegistrationToken[]
+
+  @@index([authProvider, authSubject])
+  @@map("users")
+}
+
+model GatewayConfig {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  url               String
+  token             String
+  codexAgentId      String?
+  name              String?  @default("Mon Gateway")
+  saveConversations Boolean  @default(false)
+  messageLimit      Int      @default(50) // Messages to keep per channel (0 = unlimited)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gateway_configs")
+}
+
+model AdvisorProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  name      String   @default("Mon Conseiller")
+  role      String   @default("conseiller")
+  tone      String   @default("bienveillant")
+  depth     String   @default("détaillé")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("advisor_profiles")
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  channelName String    @default("general")
+  title       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  messages    Message[]
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, channelName])
+  @@map("sessions")
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  sessionId     String
+  userId        String
+  content       String
+  role          String
+  model         String?
+  tokens        Int?
+  hasAttachment Boolean  @default(false)
+  readByAgent   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, createdAt])
+  @@index([userId])
+  @@map("messages")
+}
+
+model ApiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  model     String
+  tokens    Int
+  cost      Float
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("api_usage")
+}
+
+// Roadmap tasks - synced across devices
+model RoadmapTask {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("todo") // todo | in_progress | done
+  priority    Int       @default(0) // 0-10, higher = more urgent
+  source      String    @default("user") // agent | user
+  eta         String?   // Estimation (e.g., "5 min", "1h", "today")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([status])
+  @@index([priority])
+  @@map("roadmap_tasks")
+}
+
+// Liaison cross-device (QR code style WhatsApp)
+model DeviceLink {
+  id           String    @id @default(cuid())
+  code         String    @unique // Code unique affiché dans le QR
+  userId       String?   // Rempli quand l'appareil principal valide
+  encryptedKey String?   // Clé de chiffrement transférée (chiffrée avec code)
+  status       String    @default("pending") // pending | validated | expired | used
+  expiresAt    DateTime  // Expire après 2 minutes
+  createdAt    DateTime  @default(now())
+  validatedAt  DateTime?
+  usedAt       DateTime?
+
+  @@index([code])
+  @@index([status])
+  @@map("device_links")
+}
+
+enum CompanionMachineStatus {
+  online
+  offline
+  degraded
+  unregistered
+}
+
+enum CompanionAgentOwnership {
+  managed
+  external
+  adoptable
+  conflicted
+}
+
+enum CompanionOperationType {
+  scan_inventory
+  bootstrap_include
+  import_agent
+  create_agent
+  update_agent_model
+  update_agent_bindings
+  update_workspace_templates
+  archive_agent
+  delete_agent
+}
+
+enum CompanionOperationStatus {
+  pending
+  in_progress
+  applied
+  conflicted
+  failed
+  manual_action_required
+}
+
+model CompanionMachine {
+  id                String                 @id @default(cuid())
+  userId            String
+  machineName       String
+  machineFingerprint String?
+  rootConfigPath    String?
+  supersededByMachineId String?
+  platform          String
+  companionVersion  String
+  openclawVersion   String?
+  publicKey         String?
+  apiKey            String                 @unique
+  status            CompanionMachineStatus @default(unregistered)
+  configMode        String                 @default("legacy")
+  lastSeenAt        DateTime?
+  lastInventoryHash String?
+  activeConfigHash  String?
+  metadata          Json?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  inventories       CompanionMachineInventory[]
+  agents            CompanionManagedAgent[]
+  operations        CompanionConfigOperation[]
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, machineFingerprint])
+  @@index([userId, rootConfigPath])
+  @@index([userId, supersededByMachineId])
+  @@index([status])
+  @@map("companion_machines")
+}
+
+model CompanionRegistrationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@map("companion_registration_tokens")
+}
+
+model CompanionMachineInventory {
+  id                   String           @id @default(cuid())
+  machineId            String
+  rootConfigPath       String?
+  managedFragmentPaths String[]         @default([])
+  configHash           String?
+  snapshot             Json
+  warnings             String[]         @default([])
+  scannedAt            DateTime
+  createdAt            DateTime         @default(now())
+  machine              CompanionMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId])
+  @@index([machineId, createdAt])
+  @@index([scannedAt])
+  @@map("companion_machine_inventories")
+}
+
+model CompanionManagedAgent {
+  id                       String                   @id @default(cuid())
+  machineId                String
+  ekybotAgentId            String?
+  openclawAgentId          String
+  name                     String
+  workspacePath            String?
+  provider                 String?
+  model                    String?
+  ownership                CompanionAgentOwnership @default(external)
+  projectId                String?
+  channelKey               String?
+  lastAppliedConfigVersion Int?
+  lastAppliedHash          String?
+  metadata                 Json?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  machine                  CompanionMachine         @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@unique([machineId, openclawAgentId])
+  @@index([machineId])
+  @@index([ownership])
+  @@map("companion_managed_agents")
+}
+
+model CompanionConfigOperation {
+  id            String                   @id @default(cuid())
+  machineId     String
+  type          CompanionOperationType
+  status        CompanionOperationStatus @default(pending)
+  requestedBy   String
+  payload       Json
+  result        Json?
+  error         String?
+  rollbackToken String?
+  requestedAt   DateTime                 @default(now())
+  appliedAt     DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  machine       CompanionMachine         @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("companion_config_operations")
+}
+
+model AgentNotification {
+  id             String         @id @default(cuid())
+  fromAgentId    String
+  toAgentId      String
+  fromAgentName  String?
+  content        String
+  priority       String         @default("normal")
+  threadId       String?
+  visible        Boolean        @default(false)
+  status         String         @default("pending")
+  error          String?
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+  interAgentTurn InterAgentTurn?
+
+  @@index([fromAgentId])
+  @@index([toAgentId])
+  @@index([threadId])
+  @@index([status])
+  @@index([status, toAgentId, createdAt])
+  @@index([createdAt])
+  @@map("agent_notifications")
+}
+
+model InterAgentTurn {
+  id                   String             @id @default(cuid())
+  notificationId       String?            @unique
+  conversationId       String
+  requestId            String
+  mentionId            String
+  relayId              String             @unique
+  sourceChannelKey     String
+  hostAgentId          String
+  targetAgentId        String
+  idempotencyKey       String             @unique
+  state                String             @default("queued")
+  publishStep          String?
+  systemAckMessageId   String?
+  targetReplyMessageId String?
+  hostSummaryMessageId String?
+  error                String?
+  metadata             Json?
+  queuedAt             DateTime?
+  sentToConnectorAt    DateTime?
+  targetReplyAt        DateTime?
+  hostSummaryAt        DateTime?
+  completedAt          DateTime?
+  timeoutAt            DateTime?
+  failedAt             DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  notification         AgentNotification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+
+  @@index([sourceChannelKey])
+  @@index([hostAgentId])
+  @@index([targetAgentId])
+  @@index([state])
+  @@index([mentionId])
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("inter_agent_turns")
+}

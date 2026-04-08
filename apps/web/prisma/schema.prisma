@@ -1,0 +1,930 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AuthProvider {
+  clerk
+  supabase
+  workspace
+  system
+}
+
+model User {
+  id                     String          @id @default(cuid())
+  authProvider           AuthProvider    @default(clerk)
+  authSubject            String          @unique
+  clerkId                String?         @unique
+  email                  String          @unique
+  name                   String?
+  imageUrl               String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  encryptedData          String?
+  encryptedDataUpdatedAt DateTime?
+  syncSalt               String?
+  profile                AdvisorProfile?
+  agents                 Agent[]
+  apiUsage               ApiUsage[]
+  gatewayConfig          GatewayConfig?
+  messages               Message[]
+  projects               Project[]
+  sessions               Session[]
+  subscription           Subscription?
+  apiKeys                UserApiKey[]
+  workspaces             Workspace[]
+  companionMachines      CompanionMachine[]
+  companionRegistrationTokens CompanionRegistrationToken[]
+  mobilePushDevices      MobilePushDevice[]
+  longRunningRuns        LongRunningRun[]
+  superAdminRoles        SuperAdmin[]
+
+  @@index([authProvider, authSubject])
+  @@map("users")
+}
+
+model SuperAdmin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  grantedBy String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("super_admins")
+}
+
+model GatewayConfig {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  orgId                   String?
+  url                     String?
+  token                   String?
+  cronDefaultModel        String    @default("ollama/nemotron-3-nano:30b")
+  cronContextLimitTokens  Int       @default(32000)
+  codexAgentId            String?
+  name                    String?   @default("Mon Assistant")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  saveConversations       Boolean   @default(true)
+  codexEnabled            Boolean   @default(false)
+  codexProjectChannels    String[]  @default([])
+  messageLimit            Int       @default(50)
+  anthropicApiKey         String?
+  anthropicAdminKey       String?
+  firstInstructionsSentAt DateTime?
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("gateway_configs")
+}
+
+model AdvisorProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  name      String   @default("Mon Conseiller")
+  role      String   @default("conseiller")
+  tone      String   @default("bienveillant")
+  depth     String   @default("détaillé")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("advisor_profiles")
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  orgId       String?
+  title       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  channelName String    @default("general")
+  messages    Message[]
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, channelName])
+  @@map("sessions")
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  sessionId  String
+  userId     String
+  content    String
+  role       String
+  model      String?
+  tokens     Int?
+  createdAt  DateTime @default(now())
+  images     String[] @default([])
+  audio      String?
+  replyTo    Json?
+  authorType String   @default("human")
+  authorName String?
+  forwarded  Boolean  @default(false)
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, createdAt])
+  @@index([userId])
+  @@map("messages")
+}
+
+model ApiUsage {
+  id         String   @id @default(cuid())
+  userId     String
+  channelKey String?
+  agentId    String?
+  model      String
+  tokens     Int
+  cost       Float
+  createdAt  DateTime @default(now())
+  agent      Agent?   @relation(fields: [agentId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([channelKey])
+  @@index([agentId])
+  @@index([createdAt])
+  @@map("api_usage")
+}
+
+model RoadmapTask {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  status      String        @default("todo")
+  priority    Int           @default(0)
+  source      String        @default("user")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  completedAt DateTime?
+  images      String[]      @default([])
+  userId      String?
+  channelKey  String?
+  projectId   String?
+  agentId     String?
+  agent       Agent?        @relation(fields: [agentId], references: [id])
+  project     Project?      @relation(fields: [projectId], references: [id])
+  comments    TaskComment[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([channelKey])
+  @@index([projectId])
+  @@index([agentId])
+  @@map("roadmap_tasks")
+}
+
+model TaskComment {
+  id        String      @id @default(cuid())
+  taskId    String
+  content   String
+  images    String[]    @default([])
+  author    String      @default("user")
+  authorId  String?
+  createdAt DateTime    @default(now())
+  task      RoadmapTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("task_comments")
+}
+
+model DeviceLink {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  status       String    @default("pending")
+  encryptedKey String?
+  expiresAt    DateTime
+  validatedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([code])
+  @@index([expiresAt])
+  @@map("device_links")
+}
+
+model Broadcast {
+  id        String   @id @default(cuid())
+  channel   String   @default("invest")
+  title     String
+  content   String
+  url       String?
+  source    String   @default("webhook")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([channel])
+  @@index([createdAt])
+  @@map("broadcasts")
+}
+
+model AgentLog {
+  id        String   @id @default(cuid())
+  type      String   @default("info")
+  message   String
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("agent_logs")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId], map: "push_subscriptions_userid_idx")
+  @@map("push_subscriptions")
+}
+
+enum MobilePushPlatform {
+  ios
+  android
+}
+
+enum MobilePushProvider {
+  apns
+  fcm
+}
+
+model MobilePushDevice {
+  id         String             @id @default(cuid())
+  userId     String
+  platform   MobilePushPlatform
+  provider   MobilePushProvider
+  token      String             @unique
+  deviceId   String
+  appVersion String?
+  isActive   Boolean            @default(true)
+  lastSeenAt DateTime           @default(now())
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, deviceId], map: "mobile_push_devices_platform_deviceid_key")
+  @@index([userId], map: "mobile_push_devices_userid_idx")
+  @@index([platform, isActive], map: "mobile_push_devices_platform_isactive_idx")
+  @@map("mobile_push_devices")
+}
+
+model Channel {
+  id                 String    @id @default(cuid())
+  userId             String
+  orgId              String?
+  name               String
+  key                String
+  systemPrompt       String?
+  ekybotRules        String?
+  useDefaultRules    Boolean   @default(true)
+  instructionsSentAt DateTime?
+  budget             Float?
+  agentId            String?
+  projectId          String?
+  sessionState       Json?
+  lastReadAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  agent              Agent?    @relation(fields: [agentId], references: [id])
+  project            Project?  @relation(fields: [projectId], references: [id])
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@index([orgId])
+  @@index([agentId])
+  @@index([projectId])
+  @@map("channels")
+}
+
+model ChannelPermission {
+  id          String   @id @default(cuid())
+  channelId   String
+  userId      String?
+  clerkUserId String?
+  role        String   @default("member")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([channelId, userId])
+  @@unique([channelId, clerkUserId])
+  @@index([userId])
+  @@index([clerkUserId])
+  @@index([channelId])
+  @@map("channel_permissions")
+}
+
+model UserApiKey {
+  id           String    @id @default(cuid())
+  userId       String
+  provider     String
+  encryptedKey String
+  keyHint      String?
+  isValid      Boolean   @default(true)
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("user_api_keys")
+}
+
+model Project {
+  id          String            @id @default(cuid())
+  userId      String
+  orgId       String?
+  name        String
+  slug        String
+  description String?
+  color       String?
+  icon        String?
+  settings    Json              @default("{}")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  agents      Agent[]
+  channels    Channel[]
+  activities  ProjectActivity[]
+  memories    ProjectMemory[]
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks       RoadmapTask[]
+  routines    Routine[]
+
+  @@unique([userId, name])
+  @@unique([userId, slug])
+  @@index([userId])
+  @@map("projects")
+}
+
+model ProjectMemory {
+  id        String   @id @default(cuid())
+  projectId String
+  key       String
+  content   String
+  updatedBy String?
+  updatedAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([projectId])
+  @@map("project_memories")
+}
+
+model ProjectActivity {
+  id        String   @id @default(cuid())
+  projectId String
+  agentId   String?
+  agentName String?
+  action    String
+  summary   String
+  details   Json?
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([agentId])
+  @@map("project_activities")
+}
+
+model Agent {
+  id                 String               @id @default(cuid())
+  userId             String
+  orgId              String?
+  name               String
+  description        String?
+  provider           String               @default("anthropic")
+  model              String               @default("claude-sonnet-4-20250514")
+  apiKey             String?
+  openclawAgentId    String?
+  systemPrompt       String?
+  budget             Float?
+  dailyBudget        Float?
+  budgetUsed         Float                @default(0)
+  budgetResetAt      DateTime?
+  priority           Int                  @default(2)
+  isActive           Boolean              @default(true)
+  disabledReason     String?
+  disabledAt         DateTime?
+  lastStopNotifiedAt DateTime?
+  color              String?
+  icon               String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  workspaceSyncedAt  DateTime?
+  projectId          String?
+  skills             AgentSkill[]
+  tasks              AgentTask[]
+  workspaceFiles     AgentWorkspaceFile[]
+  project            Project?             @relation(fields: [projectId], references: [id])
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usage              ApiUsage[]
+  channels           Channel[]
+  openclawDailyCosts OpenclawDailyCost[]
+  roadmapTasks       RoadmapTask[]
+  routines           Routine[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@index([orgId])
+  @@index([projectId])
+  @@map("agents")
+}
+
+model OpenclawDailyCost {
+  id               String   @id @default(cuid())
+  agentId          String
+  date             DateTime @db.Date
+  provider         String
+  model            String
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  cost             Float
+  messageCount     Int      @default(0)
+  syncedAt         DateTime @default(now())
+  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, date, provider, model])
+  @@index([agentId])
+  @@index([date])
+  @@index([provider])
+  @@map("openclaw_daily_costs")
+}
+
+model AgentWorkspaceFile {
+  id       String   @id @default(cuid())
+  agentId  String
+  filename String
+  content  String
+  size     Int
+  hash     String?
+  syncedAt DateTime @default(now())
+  agent    Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, filename])
+  @@index([agentId])
+  @@map("agent_workspace_files")
+}
+
+model AgentTask {
+  id          String    @id @default(cuid())
+  userId      String
+  agentId     String?
+  agentName   String?
+  channelKey  String
+  title       String
+  description String?
+  priority    Int       @default(2)
+  status      String    @default("pending")
+  result      String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  agent       Agent?    @relation(fields: [agentId], references: [id])
+
+  @@index([userId])
+  @@index([agentId])
+  @@index([status])
+  @@index([priority])
+  @@map("agent_tasks")
+}
+
+model AgentNotification {
+  id            String    @id @default(cuid())
+  fromAgentId   String
+  toAgentId     String
+  fromAgentName String?
+  content       String
+  priority      String    @default("normal")
+  threadId      String?
+  visible       Boolean   @default(false)
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  expiresAt     DateTime?
+  lastAttemptAt DateTime?
+  error         String?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  interAgentTurn InterAgentTurn?
+
+  @@index([fromAgentId])
+  @@index([toAgentId])
+  @@index([threadId])
+  @@index([status])
+  @@index([status, toAgentId, createdAt])
+  @@index([status, attempts])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("agent_notifications")
+}
+
+model InterAgentTurn {
+  id                    String    @id @default(cuid())
+  notificationId        String?   @unique
+  conversationId        String
+  requestId             String
+  mentionId             String
+  relayId               String    @unique
+  sourceChannelKey      String
+  hostAgentId           String
+  targetAgentId         String
+  idempotencyKey        String    @unique
+  state                 String    @default("queued")
+  publishStep           String?
+  systemAckMessageId    String?
+  targetReplyMessageId  String?
+  hostSummaryMessageId  String?
+  error                 String?
+  metadata              Json?
+  queuedAt              DateTime?
+  sentToConnectorAt     DateTime?
+  targetReplyAt         DateTime?
+  hostSummaryAt         DateTime?
+  completedAt           DateTime?
+  timeoutAt             DateTime?
+  failedAt              DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  notification          AgentNotification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  runEvents             InterAgentRunEvent[]
+
+  @@index([sourceChannelKey])
+  @@index([hostAgentId])
+  @@index([targetAgentId])
+  @@index([state])
+  @@index([mentionId])
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("inter_agent_turns")
+}
+
+model InterAgentRunEvent {
+  id          String         @id @default(cuid())
+  turnId       String
+  type         String
+  state        String
+  publishStep  String?
+  messageId    String?
+  error        String?
+  metadata     Json?
+  happenedAt   DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  turn         InterAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([turnId, happenedAt])
+  @@index([type, happenedAt])
+  @@index([state, happenedAt])
+  @@map("inter_agent_run_events")
+}
+
+enum LongRunningRunStatus {
+  created
+  accepted
+  working
+  delayed
+  stalled
+  completed
+  failed
+  cancelled
+}
+
+enum LongRunningRunPhase {
+  intake
+  analysis
+  execution
+  writing
+  publishing
+  done
+  error
+}
+
+model LongRunningRun {
+  id              String               @id @default(cuid())
+  userId          String
+  channelKey      String
+  sessionId       String?
+  agentId         String?
+  userMessageId   String?
+  requestId       String?              @unique
+  status          LongRunningRunStatus @default(created)
+  phase           LongRunningRunPhase  @default(intake)
+  title           String?
+  progressHint    String?
+  lastHeartbeatAt DateTime?
+  lastRenderedAt  DateTime?
+  finalMessageId  String?
+  metadata        Json?
+  completedAt     DateTime?
+  failedAt        DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, channelKey])
+  @@index([userId, status])
+  @@index([status])
+  @@index([agentId, status])
+  @@index([createdAt])
+  @@index([userId, updatedAt])
+  @@map("long_running_runs")
+}
+
+model Routine {
+  id            String       @id @default(cuid())
+  userId        String
+  agentId       String?
+  projectId     String?
+  name          String
+  description   String?
+  schedule      String
+  scheduleRaw   Json?
+  enabled       Boolean      @default(true)
+  openclawJobId String?      @unique
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  runs          RoutineRun[]
+  agent         Agent?       @relation(fields: [agentId], references: [id])
+  project       Project?     @relation(fields: [projectId], references: [id])
+
+  @@index([userId])
+  @@index([agentId])
+  @@map("routines")
+}
+
+model RoutineRun {
+  id         String    @id @default(cuid())
+  routineId  String
+  status     String    @default("running")
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+  tokensUsed Int?
+  costUsd    Float?
+  summary    String?
+  error      String?
+  routine    Routine   @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@index([routineId])
+  @@index([startedAt])
+  @@map("routine_runs")
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  orgId                String?
+  stripeCustomerId     String    @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  plan                 String    @default("free")
+  status               String    @default("inactive")
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  trialEnd             DateTime?
+  addonUsers           Int       @default(0)
+  addonAgents          Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model AgentSkill {
+  id          String   @id @default(cuid())
+  userId      String
+  orgId       String?
+  agentId     String?
+  name        String
+  description String?
+  location    String?
+  source      String   @default("builtin")
+  enabled     Boolean  @default(true)
+  config      Json?
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  agent       Agent?   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentId, name])
+  @@index([userId])
+  @@index([agentId])
+  @@index([orgId])
+  @@map("agent_skills")
+}
+
+model BugReport {
+  id         String   @id @default(cuid())
+  userId     String?
+  userEmail  String?
+  userName   String?
+  userAgent  String?
+  url        String?
+  error      String
+  stackTrace String?
+  metadata   String?
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([resolved])
+  @@index([createdAt])
+  @@map("bug_reports")
+}
+
+model Workspace {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String?
+  gatewayUrl   String
+  gatewayToken String?
+  apiKey       String    @unique
+  agents       Json?
+  status       String    @default("active")
+  lastSeenAt   DateTime?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id])
+
+  @@map("workspaces")
+}
+
+enum CompanionMachineStatus {
+  online
+  offline
+  degraded
+  unregistered
+}
+
+enum CompanionAgentOwnership {
+  managed
+  external
+  adoptable
+  conflicted
+}
+
+enum CompanionOperationType {
+  scan_inventory
+  bootstrap_include
+  import_agent
+  create_agent
+  update_agent_model
+  update_agent_bindings
+  update_workspace_templates
+  archive_agent
+  delete_agent
+}
+
+enum CompanionOperationStatus {
+  pending
+  in_progress
+  applied
+  conflicted
+  failed
+  manual_action_required
+}
+
+model CompanionMachine {
+  id                  String                 @id @default(cuid())
+  userId              String
+  machineName         String
+  machineFingerprint  String?
+  rootConfigPath      String?
+  supersededByMachineId String?
+  platform            String
+  companionVersion    String
+  openclawVersion     String?
+  publicKey           String?
+  apiKey              String                 @unique
+  status              CompanionMachineStatus @default(unregistered)
+  configMode          String                 @default("legacy")
+  lastSeenAt          DateTime?
+  lastInventoryHash   String?
+  activeConfigHash    String?
+  metadata            Json?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  inventories         CompanionMachineInventory[]
+  agents              CompanionManagedAgent[]
+  operations          CompanionConfigOperation[]
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, machineFingerprint])
+  @@index([userId, rootConfigPath])
+  @@index([userId, supersededByMachineId])
+  @@index([status])
+  @@map("companion_machines")
+}
+
+model CompanionRegistrationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@map("companion_registration_tokens")
+}
+
+model CompanionMachineInventory {
+  id                   String           @id @default(cuid())
+  machineId            String
+  rootConfigPath       String?
+  managedFragmentPaths String[]         @default([])
+  configHash           String?
+  snapshot             Json
+  warnings             String[]         @default([])
+  scannedAt            DateTime
+  createdAt            DateTime         @default(now())
+  machine              CompanionMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId])
+  @@index([machineId, createdAt])
+  @@index([machineId, scannedAt(sort: Desc)])
+  @@index([scannedAt])
+  @@map("companion_machine_inventories")
+}
+
+model CompanionManagedAgent {
+  id                       String                  @id @default(cuid())
+  machineId                String
+  ekybotAgentId            String?
+  openclawAgentId          String
+  name                     String
+  workspacePath            String?
+  provider                 String?
+  model                    String?
+  ownership                CompanionAgentOwnership @default(external)
+  projectId                String?
+  channelKey               String?
+  lastAppliedConfigVersion Int?
+  lastAppliedHash          String?
+  metadata                 Json?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  machine                  CompanionMachine        @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@unique([machineId, openclawAgentId])
+  @@index([machineId])
+  @@index([ownership])
+  @@map("companion_managed_agents")
+}
+
+model CompanionConfigOperation {
+  id            String                   @id @default(cuid())
+  machineId     String
+  type          CompanionOperationType
+  status        CompanionOperationStatus @default(pending)
+  requestedBy   String
+  payload       Json
+  result        Json?
+  error         String?
+  rollbackToken String?
+  requestedAt   DateTime                 @default(now())
+  appliedAt     DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  machine       CompanionMachine         @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("companion_config_operations")
+}

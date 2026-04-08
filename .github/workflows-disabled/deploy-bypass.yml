@@ -1,0 +1,91 @@
+name: Deploy Bypass (Full Control)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deploy even if no changes'
+        required: false
+        default: 'false'
+
+env:
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}  
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: 🛎 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: latest
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: 📥 Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          pnpm install --frozen-lockfile --ignore-scripts
+          echo "✅ Dependencies installed"
+
+      - name: 🗄️ Generate Prisma Client
+        run: |
+          echo "🗄️ Generating Prisma client..."
+          cd apps/web && pnpm run prisma:generate
+          echo "✅ Prisma client generated"
+
+      - name: 🔨 Build Application
+        run: |
+          echo "🔨 Building application..."
+          cd apps/web
+          NODE_ENV=production pnpm build
+          echo "✅ Build completed"
+        env:
+          SKIP_ENV_VALIDATION: true
+
+      - name: 🚀 Deploy to Vercel
+        run: |
+          echo "🚀 Deploying to Vercel..."
+          npm install -g vercel@latest
+          vercel --token $VERCEL_TOKEN --prod --yes --force
+          echo "✅ Deployment completed"
+
+      - name: 🔍 Verify Deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          sleep 30
+          version=$(curl -s "https://www.ekybot.com/" | grep -o "v0\.[0-9]*\.[0-9]*" | head -1 || echo "unknown")
+          echo "📊 Live version: $version"
+          if [[ "$version" != "unknown" ]]; then
+            echo "✅ Deployment verification successful"
+          else
+            echo "⚠️ Could not verify version"
+          fi
+
+      - name: 📢 Notify Success
+        if: success()
+        run: |
+          echo "🎉 GitHub Actions deployment successful!"
+          echo "Version deployed: $(date)"
+          
+      - name: 📢 Notify Failure  
+        if: failure()
+        run: |
+          echo "💥 GitHub Actions deployment failed!"
+          echo "Check logs for details"

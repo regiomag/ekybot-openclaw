@@ -1,0 +1,69 @@
+# Environment
+.env
+.env.local
+.env*.local
+.env.production
+.env.development
+.env.vercel*
+SUPABASE-CREDENTIALS.md
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+.nyc_output
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.pem
+*.p8
+*.keystore
+*.jks
+.turbo
+.vercel
+.env.clerk
+
+# Mobile (Capacitor — not open source)
+ios/
+android/
+capacitor.config.ts
+capacitor.config.dev.ts
+google-services.json
+GoogleService-Info.plist
+
+# Build artifacts
+*.xcarchive
+*.ipa
+*.apk
+*.aab
+
+# Secrets
+token.txt
+userid.txt
+*.secret
+ACCOUNTS.md

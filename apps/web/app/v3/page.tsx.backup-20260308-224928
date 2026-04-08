@@ -1,0 +1,3900 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
+// Clerk components removed — using useSafeUser from AuthContext instead (Capacitor-safe)
+import { useSafeUser, useIsNativeApp } from '../hooks/useSafeClerk';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { usePushNotifications } from '../hooks/usePushNotifications';
+import { BugReportModal } from '@/components/BugReportModal';
+import { Header } from './components/Header';
+import { BottomNav } from './components/BottomNav';
+import { ChannelConfigModal } from './components/ChannelConfigModal';
+import { useTranslation } from '@/i18n/context';
+import { initUserStorage, getUserStorage, setUserStorage } from '../lib/userStorage';
+import { getCachedData, setCachedData, clearCachedData } from '../hooks/useLocalCache';
+import { useBidirectionalSync } from '../hooks/useBidirectionalSync';
+import MentionAutocomplete from '@/components/MentionAutocomplete';
+import MessageContent from '@/components/MessageContent';
+// Tesseract is lazy-loaded when needed to avoid bundling issues
+// import Tesseract from 'tesseract.js';
+import { useUserStorageCleanup } from '../hooks/useUserStorageCleanup';
+import '../lib/logCapture'; // Capture console logs for debugging
+import { APP_VERSION } from '@/config/version';
+import { DemoBanner } from '@/components/DemoBanner';
+import { DemoAuthGate, useDemoAuthGate } from '@/components/DemoAuthGate';
+import { DEMO_CHANNELS, DEMO_MESSAGES } from '@/data/demo-data';
+import { DEMO_MESSAGES_EN, DEMO_MESSAGES_DE } from '@/data/demo-data-i18n';
+
+// Format timestamp to HH:MM
+const formatTime = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' });
+};
+
+const POLL_INTERVAL = 5000; // 5s for more responsive agent messages
+// Images uploaded to Vercel Blob, URL sent in message text
+const IMAGES_ENABLED = true;
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  images?: string[];
+  audio?: string;
+  replyTo?: {
+    id: string;
+    content: string;
+    role: 'user' | 'assistant';
+  };
+  reactions?: string[];
+  linkedTask?: {
+    id: string;
+    title: string;
+  };
+  synced?: boolean;  // Flag to prevent re-pushing to DB during sync
+  authorType?: 'human' | 'main-agent' | 'sub-agent';  // Who sent this message
+  authorName?: string;  // Display name: "Michael", "Odin", "EkyNavy-Strat"
+}
+
+interface Channel {
+  id: string;
+  key: string;
+  name: string;
+  messages: Message[];
+  agentName?: string | null;  // Assigned agent name
+  unreadCount?: number;       // Unread messages count
+}
+
+interface ActivityLog {
+  id: string;
+  timestamp: number;
+  type: 'action' | 'deploy' | 'roadmap' | 'error' | 'info';
+  message: string;
+}
+
+interface QueuedMessage {
+  id: string;
+  channelKey: string; // Queue is per-channel
+  content: string;
+  images?: string[];
+  ocrTexts?: string[]; // OCR extracted text for each image
+  audio?: { blob?: Blob; url: string };
+  files?: { name: string; url: string; type: string }[];
+  timestamp?: number;
+  replyTo?: {
+    id: string;
+    content: string;
+    role: 'user' | 'assistant';
+  };
+}
+
+// Demo mode messages for App Store screenshots (localized)
+const getDemoMessages = (lang: string): Message[] => {
+  const now = Date.now();
+  if (lang === 'en') {
+    return [
+      { id: 'demo-1', role: 'user', content: 'Hi! What can you do?', timestamp: now - 300000 },
+      { id: 'demo-2', role: 'assistant', content: 'Hello! 👋 I\'m your personal assistant connected to OpenClaw.\n\nI can help you with:\n• 📅 Manage your calendar and reminders\n• 📧 Read and summarize your emails\n• 🔍 Search for information\n• 💡 Answer your questions\n• 📝 Take notes\n• 🏠 Control your smart home\n\nWhat can I do for you?', timestamp: now - 290000 },
+      { id: 'demo-3', role: 'user', content: 'Remind me to call the doctor tomorrow at 10am', timestamp: now - 200000 },
+      { id: 'demo-4', role: 'assistant', content: '✅ Got it! I\'ll send you a reminder tomorrow at 9:45am to call the doctor.\n\nWould you like me to add this event to your calendar too?', timestamp: now - 190000 },
+      { id: 'demo-5', role: 'user', content: 'Yes please', timestamp: now - 100000 },
+      { id: 'demo-6', role: 'assistant', content: '📅 Event added:\n\n**Call the doctor**\nTomorrow, 10:00 - 10:30\n\nYou\'ll receive a notification 15 minutes before. Anything else?', timestamp: now - 90000 },
+    ];
+  } else if (lang === 'de') {
+    return [
+      { id: 'demo-1', role: 'user', content: 'Hallo! Was kannst du machen?', timestamp: now - 300000 },
+      { id: 'demo-2', role: 'assistant', content: 'Hallo! 👋 Ich bin dein persönlicher Assistent, verbunden mit OpenClaw.\n\nIch kann dir helfen mit:\n• 📅 Kalender und Erinnerungen verwalten\n• 📧 E-Mails lesen und zusammenfassen\n• 🔍 Informationen suchen\n• 💡 Deine Fragen beantworten\n• 📝 Notizen machen\n• 🏠 Dein Smart Home steuern\n\nWas kann ich für dich tun?', timestamp: now - 290000 },
+      { id: 'demo-3', role: 'user', content: 'Erinnere mich morgen um 10 Uhr den Arzt anzurufen', timestamp: now - 200000 },
+      { id: 'demo-4', role: 'assistant', content: '✅ Notiert! Ich schicke dir morgen um 9:45 Uhr eine Erinnerung, den Arzt anzurufen.\n\nMöchtest du, dass ich diesen Termin auch in deinen Kalender eintrage?', timestamp: now - 190000 },
+      { id: 'demo-5', role: 'user', content: 'Ja bitte', timestamp: now - 100000 },
+      { id: 'demo-6', role: 'assistant', content: '📅 Termin hinzugefügt:\n\n**Arzt anrufen**\nMorgen, 10:00 - 10:30\n\nDu erhältst 15 Minuten vorher eine Benachrichtigung. Noch etwas?', timestamp: now - 90000 },
+    ];
+  }
+  // Default: French
+  return [
+    { id: 'demo-1', role: 'user', content: 'Salut ! Qu\'est-ce que tu peux faire ?', timestamp: now - 300000 },
+    { id: 'demo-2', role: 'assistant', content: 'Bonjour ! 👋 Je suis ton assistant personnel connecté à OpenClaw.\n\nJe peux t\'aider avec :\n• 📅 Gérer ton calendrier et tes rappels\n• 📧 Lire et résumer tes emails\n• 🔍 Rechercher des informations\n• 💡 Répondre à tes questions\n• 📝 Prendre des notes\n• 🏠 Contrôler ta maison connectée\n\nQue puis-je faire pour toi ?', timestamp: now - 290000 },
+    { id: 'demo-3', role: 'user', content: 'Rappelle-moi d\'appeler le médecin demain à 10h', timestamp: now - 200000 },
+    { id: 'demo-4', role: 'assistant', content: '✅ C\'est noté ! Je t\'enverrai un rappel demain à 9h45 pour appeler le médecin.\n\nVeux-tu que j\'ajoute aussi cet événement à ton calendrier ?', timestamp: now - 190000 },
+    { id: 'demo-5', role: 'user', content: 'Oui s\'il te plaît', timestamp: now - 100000 },
+    { id: 'demo-6', role: 'assistant', content: '📅 Événement ajouté :\n\n**Appeler le médecin**\nDemain, 10:00 - 10:30\n\nTu recevras une notification 15 minutes avant. Autre chose ?', timestamp: now - 90000 },
+  ];
+};
+
+function ChatV3Content() {
+  const { user, isLoaded, isSignedIn, userId: clerkUserId } = useSafeUser();
+  const isNativeApp = useIsNativeApp();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Demo mode: explicit demo param OR not signed in (web only, not native app)
+  const isCapacitor = isNativeApp;
+  const isWebDemo = isLoaded && !isSignedIn && !isCapacitor;
+  const isDemo = searchParams.get('demo') === 'true' || isWebDemo;
+  const isScreenshot = searchParams.get('screenshot') === 'true'; // Clean mode for App Store screenshots
+  const checkoutStatus = searchParams.get('checkout');
+  const { t, locale } = useTranslation();
+  
+  // Clear user storage on logout
+  useUserStorageCleanup();
+  const demoGate = useDemoAuthGate();
+  
+  // Agent name - dynamic from main agent or fallback
+  const [mainAgentName, setMainAgentName] = useState<string>('Odin'); // fallback
+  const agentName = isDemo ? t('v3.agentName') : mainAgentName;
+  
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [activeChannelKey, setActiveChannelKey] = useState('general');
+  const [input, setInput] = useState('');
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [pendingOcrTexts, setPendingOcrTexts] = useState<string[]>([]); // OCR text for each pending image
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<{ name: string; type: string; dataUrl: string }[]>([]);
+  const [pendingAudio, setPendingAudio] = useState<{ blob: Blob; url: string } | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  // Loading state PER CHANNEL (not global) - allows parallel agent conversations
+  const [loadingChannels, setLoadingChannels] = useState<Set<string>>(new Set());
+  const isLoading = loadingChannels.has(activeChannelKey); // Computed for current channel
+  const [error, setError] = useState<{ message: string; messageSent?: boolean; canRetry?: boolean; retryData?: { content: string; images?: string[]; audio?: string; files?: { name: string; url: string; type: string }[] } } | null>(null);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const [channelBudget, setChannelBudget] = useState<{ budget: number | null; used: number; isOverBudget: boolean } | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [agentStatus, setAgentStatus] = useState<'online' | 'working' | 'offline'>('offline');
+  const [currentTask, setCurrentTask] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
+  const [showPushBanner, setShowPushBanner] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [linkToTaskModal, setLinkToTaskModal] = useState<{ open: boolean; message: Message | null }>({ open: false, message: null });
+  const [preLinkedTask, setPreLinkedTask] = useState<{ id: string; title: string } | null>(null);
+  const [showPreLinkModal, setShowPreLinkModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [roadmapTasks, setRoadmapTasks] = useState<{ id: string; title: string; status: string }[]>([]);
+  const [showSearch, setShowSearch] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<{ plan: string; status: string; agentLimit: number } | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [isGatewayConfigured, setIsGatewayConfigured] = useState<boolean | null>(null); // null = checking
+  const gatewayConfigRef = useRef<{ url: string; token: string } | null>(null); // Store gateway config for sending
+  const [showChannelConfig, setShowChannelConfig] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<{ key: string; name: string } | null>(null);
+  const [showNewChannelInput, setShowNewChannelInput] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false);
+  const [isDeletingChannel, setIsDeletingChannel] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isChangingChannel, setIsChangingChannel] = useState(false);
+  const activityPollRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Push notifications
+  const { permission, isSubscribed, isSupported, subscribe, unsubscribe } = usePushNotifications();
+  
+  // Bidirectional sync (localStorage <-> DB)
+  const { syncAllChannels, forceSync } = useBidirectionalSync(user?.id || null);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isUserAtBottomRef = useRef(true);
+  const lastMessageCountRef = useRef(0);
+  const shouldScrollOnNextUpdateRef = useRef(false);
+  
+  const activeChannel = useMemo(
+    () => channels.find(ch => ch.key === activeChannelKey) || channels[0],
+    [channels, activeChannelKey]
+  );
+  
+  // Memoize messages array to prevent re-renders when other channels update
+  const activeMessages = useMemo(
+    () => activeChannel?.messages || [],
+    [activeChannel?.messages]
+  );
+  
+  // Check if user is at bottom of chat
+  const checkIfAtBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 100; // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+  
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasNewAgentReply, setHasNewAgentReply] = useState(false);
+  
+  const scrollToBottom = useCallback((force = false) => {
+    if (force || isUserAtBottomRef.current) {
+      // Use rAF to ensure DOM is updated before scrolling
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: force ? 'instant' : 'smooth' });
+      });
+    }
+  }, []);
+  
+  // Load more messages when scrolling to top (pagination)
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState<Record<string, boolean>>({});
+  
+  const loadMoreMessages = useCallback(async (channelKey: string) => {
+    if (isLoadingMore || !hasMore[channelKey]) return;
+    
+    const channel = channels.find(ch => ch.key === channelKey);
+    if (!channel || channel.messages.length === 0) return;
+    
+    const oldestMessage = channel.messages[0];
+    setIsLoadingMore(true);
+    
+    try {
+      const currentUserId = userIdRef.current;
+      const userIdParam = currentUserId ? `&userId=${encodeURIComponent(currentUserId)}` : '';
+      
+      const response = await fetch(
+        `/api/messages?channel=${encodeURIComponent(channelKey)}${userIdParam}&limit=30&before=${oldestMessage.id}`,
+        { credentials: 'include' }
+      );
+      
+      if (!response.ok) throw new Error('Failed to load more messages');
+      
+      const data = await response.json();
+      const channelData = data.channels?.find((ch: any) => ch.key === channelKey);
+      
+      if (channelData && channelData.messages) {
+        const newMessages = channelData.messages.map((m: Message) => ({ ...m, synced: true }));
+        
+        setChannels(prev => prev.map(ch => {
+          if (ch.key !== channelKey) return ch;
+          // Prepend new messages to existing ones
+          return { ...ch, messages: [...newMessages, ...ch.messages] };
+        }));
+        
+        // Update hasMore state
+        setHasMore(prev => ({ ...prev, [channelKey]: channelData.hasMore || false }));
+      }
+    } catch (error) {
+      console.error('[V3] Failed to load more messages:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [channels, isLoadingMore, hasMore]);
+  
+  // Handle scroll event to track user position and load more messages
+  const handleScroll = useCallback(() => {
+    const atBottom = checkIfAtBottom();
+    isUserAtBottomRef.current = atBottom;
+    setShowScrollButton(!atBottom);
+    if (atBottom) setHasNewAgentReply(false);
+    
+    // Check if we should load more messages (scrolled near top)
+    const container = messagesContainerRef.current;
+    if (container && container.scrollTop < 200) {
+      loadMoreMessages(activeChannelKey);
+    }
+  }, [checkIfAtBottom, loadMoreMessages, activeChannelKey]);
+  
+  // Load channels
+  // Store userId in ref to avoid dependency issues
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = user?.id || null;
+  
+  // Toast helper (replaces native alert())
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
+  
+  const loadChannels = useCallback(async () => {
+    try {
+      const currentUserId = userIdRef.current;
+      
+      // SWR: Load from cache first for instant display
+      const cachedChannels = getCachedData<Channel[]>('chat_channels', currentUserId || undefined);
+      if (cachedChannels && cachedChannels.length > 0) {
+        setChannels(prev => {
+          if (prev.length === 0) {
+            console.log('[V3] Loaded channels from cache');
+            return cachedChannels;
+          }
+          return prev;
+        });
+      }
+      
+      const params = currentUserId ? `?userId=${encodeURIComponent(currentUserId)}` : '';
+      const response = await fetch(`/api/channels${params}`);
+      if (!response.ok) throw new Error('Failed to load channels');
+      const data = await response.json();
+      
+      if (!data.channels || data.channels.length === 0) {
+        // Only set default channel if we don't have any channels yet
+        setChannels(prev => prev.length > 0 ? prev : [{ id: 'new', key: 'general', name: '# general', messages: [] }]);
+        return;
+      }
+      
+      // CRITICAL FIX: Preserve existing messages when reloading channels
+      // This prevents losing messages when the component re-renders
+      setChannels(prev => {
+        const existingMessagesMap = new Map(prev.map(ch => [ch.key, ch.messages]));
+        
+        const sortedChannels = data.channels
+          .map((ch: any) => {
+            // Priority: existing in-memory messages > localStorage cache > empty
+            const existing = existingMessagesMap.get(ch.key);
+            if (existing && existing.length > 0) {
+              return { ...ch, messages: existing };
+            }
+            // Fallback to localStorage cache
+            const cached = getCachedData<Message[]>(`chat_messages_${ch.key}`, currentUserId || undefined);
+            return { ...ch, messages: cached || [] };
+          })
+          .sort((a: Channel, b: Channel) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+        
+        // Save to cache for next time
+        setCachedData('chat_channels', sortedChannels, currentUserId || undefined);
+        
+        return sortedChannels;
+      });
+    } catch (e) {
+      console.error('[V3] Failed to load channels:', e);
+      // Don't reset channels on error - keep existing data
+      setChannels(prev => prev.length > 0 ? prev : [{ id: 'new', key: 'general', name: '# general', messages: [] }]);
+    }
+  }, []);
+  
+  // Load messages with 8s timeout (Vercel has 10s limit)
+  const loadMessages = useCallback(async (channelKey: string, forceScroll = false) => {
+    try {
+      const currentUserId = userIdRef.current;
+      const cacheKey = `chat_messages_${channelKey}`;
+      
+      // SWR: Load from cache first for instant display (always, not just on forceScroll)
+      // This ensures messages are visible immediately even if API is slow
+      setChannels(prev => {
+        const ch = prev.find(c => c.key === channelKey);
+        if (ch && ch.messages.length > 0) return prev; // Already have messages, skip cache
+        const cachedMessages = getCachedData<Message[]>(cacheKey, currentUserId || undefined);
+        if (cachedMessages && cachedMessages.length > 0) {
+          console.log(`[V3] Loaded ${channelKey} messages from cache (${cachedMessages.length} msgs)`);
+          lastMessageCountRef.current = cachedMessages.length;
+          if (forceScroll) setTimeout(() => scrollToBottom(true), 50);
+          return prev.map(c => c.key === channelKey ? { ...c, messages: cachedMessages } : c);
+        }
+        return prev;
+      });
+      
+      const userIdParam = currentUserId ? `&userId=${encodeURIComponent(currentUserId)}` : '';
+      
+      // Add timeout to avoid hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
+      const response = await fetch(
+        `/api/messages?channel=${encodeURIComponent(channelKey)}${userIdParam}&limit=50`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) throw new Error('Failed to load messages');
+      const data = await response.json();
+      
+      const channelData = data.channels?.find((ch: any) => ch.key === channelKey);
+      
+      // CRITICAL FIX: Don't replace messages if API returned empty/invalid data
+      // This prevents losing messages when polling has a temporary failure
+      if (!channelData) {
+        console.log('[V3] No channel data returned from API, keeping existing messages');
+        return; // Keep existing messages
+      }
+      
+      // STABILITY: If API returns significantly fewer messages than we have, keep existing
+      // This prevents messages "disappearing" during transient API issues
+      const currentChannel = channels.find(c => c.key === channelKey);
+      const currentCount = currentChannel?.messages?.length || 0;
+      const newCount = channelData.messages?.length || 0;
+      if (currentCount > 5 && newCount < currentCount * 0.5) {
+        console.warn(`[V3] API returned ${newCount} msgs but we have ${currentCount} — keeping existing (stability guard)`);
+        return;
+      }
+      
+      // Mark all DB messages as synced (they came from the database)
+      const dbMessages: Message[] = (channelData.messages || []).map((m: Message) => ({ ...m, synced: true }));
+      
+      // Check if there are new messages
+      const hasNewMessages = dbMessages.length > lastMessageCountRef.current;
+      lastMessageCountRef.current = dbMessages.length;
+      
+      // SMART MERGE: Keep local temp messages that aren't in DB yet
+      // Save scroll position before state update (prevents jump during polling re-render)
+      const container = messagesContainerRef.current;
+      const savedScrollTop = container?.scrollTop ?? 0;
+      const savedScrollHeight = container?.scrollHeight ?? 0;
+      const wasAtBottom = isUserAtBottomRef.current;
+      
+      // ANTI-FLASH PATCH STRATEGY:
+      // Instead of replacing the messages array (causes React to re-render everything),
+      // we PATCH it: keep existing object references for unchanged messages,
+      // only create new objects for truly new/changed messages.
+      setChannels(prev => prev.map(ch => {
+        if (ch.key !== channelKey) return ch;
+        
+        // Build lookup of existing messages by ID (for O(1) access)
+        const existingById = new Map(ch.messages.map(m => [m.id, m]));
+        
+        // Build lookup of DB messages by timestamp+role (for matching temp messages)
+        const dbByKey = new Map(dbMessages.map(m => [`${m.role}-${m.timestamp}`, m]));
+        const dbById = new Map(dbMessages.map(m => [m.id, m]));
+        
+        // Find temp messages that are NOT yet in DB
+        const pendingTemps = ch.messages.filter(m => {
+          if (!m.id.startsWith('temp-') && !m.id.startsWith('queued-')) return false;
+          // Check if DB has this message (by timestamp+role match)
+          const key = `${m.role}-${m.timestamp}`;
+          if (dbByKey.has(key)) return false;
+          // Check with generous tolerance — timestamps differ between client & server
+          // For assistant messages from streaming, match by content (first 100 chars)
+          const contentPrefix = m.content?.slice(0, 100) || '';
+          return !dbMessages.some(db =>
+            db.role === m.role && (
+              // Match by close timestamp
+              Math.abs(db.timestamp - m.timestamp) < 30000 ||
+              // Match by content similarity (for streaming messages)
+              (contentPrefix.length > 20 && db.content?.startsWith(contentPrefix))
+            )
+          );
+        });
+        
+        // Build final message list, REUSING existing objects when unchanged
+        const finalMessages: Message[] = [];
+        const seenContentKeys = new Set<string>();
+        
+        for (const dbMsg of dbMessages) {
+          // Skip empty assistant messages (ghost from poller/streaming)
+          if (dbMsg.role === 'assistant' && !dbMsg.content?.trim()) continue;
+          
+          // Dedup: use DB ID as primary key (guaranteed unique), fall back to content key
+          const contentKey = dbMsg.id || `${dbMsg.role}-${Math.floor(dbMsg.timestamp / 10000)}-${dbMsg.content?.slice(0, 100) || ''}`;
+          if (seenContentKeys.has(contentKey)) continue;
+          seenContentKeys.add(contentKey);
+          
+          // REUSE existing object if content hasn't changed (prevents React re-render)
+          const existing = existingById.get(dbMsg.id);
+          if (existing && existing.content === dbMsg.content && existing.role === dbMsg.role) {
+            finalMessages.push(existing); // Same reference → React skips re-render
+          } else {
+            finalMessages.push({ ...dbMsg, synced: true });
+          }
+        }
+        
+        // Append pending temp messages
+        for (const temp of pendingTemps) {
+          const contentKey = `${temp.role}-${Math.floor(temp.timestamp / 10000)}-${temp.content?.slice(0, 100) || ''}`;
+          if (!seenContentKeys.has(contentKey)) {
+            finalMessages.push(temp);
+            seenContentKeys.add(contentKey);
+          }
+        }
+        
+        // Sort by timestamp
+        finalMessages.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Quick check: if the final list is identical to current (same length, same IDs in order), skip
+        if (finalMessages.length === ch.messages.length) {
+          let identical = true;
+          for (let i = 0; i < finalMessages.length; i++) {
+            if (finalMessages[i] !== ch.messages[i]) { // Reference equality!
+              identical = false;
+              break;
+            }
+          }
+          if (identical) return ch; // Exact same array — zero re-render
+        }
+        
+        return { ...ch, messages: finalMessages };
+      }));
+      
+      // Update hasMore state
+      setHasMore(prev => ({ ...prev, [channelKey]: channelData.hasMore || false }));
+      
+      // Save to cache — but NEVER shrink the cache (prevents message disappearance)
+      const cachedForCompare = getCachedData<Message[]>(cacheKey, currentUserId || undefined);
+      if (!cachedForCompare || dbMessages.length >= cachedForCompare.length) {
+        setCachedData(cacheKey, dbMessages, currentUserId || undefined);
+      }
+      
+      // Restore scroll position after re-render if user was NOT at bottom
+      // This prevents the scroll jump when React re-renders the message list
+      if (!wasAtBottom && !forceScroll && container) {
+        requestAnimationFrame(() => {
+          const newScrollHeight = container.scrollHeight;
+          const heightDiff = newScrollHeight - savedScrollHeight;
+          container.scrollTop = savedScrollTop + heightDiff;
+        });
+      }
+      
+      // Scroll rules:
+      // 1. Force scroll (initial load / channel change) → scroll to bottom
+      // 2. User just sent a message → scroll to bottom
+      // 3. New assistant message arrived → scroll to bottom (agent reply notification)
+      // 4. Otherwise → NEVER touch scroll position (user is in control)
+      const hasNewAgentMessage = hasNewMessages && dbMessages.length > 0 && dbMessages[dbMessages.length - 1]?.role === 'assistant';
+      
+      // Show "new message" badge if agent replied while user scrolled away
+      if (hasNewAgentMessage && !wasAtBottom) {
+        setHasNewAgentReply(true);
+      }
+      
+      if (forceScroll || shouldScrollOnNextUpdateRef.current || (hasNewAgentMessage && wasAtBottom)) {
+        // Double rAF ensures React has committed the DOM update
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollToBottom(true);
+          });
+        });
+        shouldScrollOnNextUpdateRef.current = false;
+      }
+    } catch (e: any) {
+      // Don't log abort errors - they're expected during navigation/cleanup
+      if (e?.name !== 'AbortError') {
+        console.error('[V3] Failed to load messages:', e);
+        // CRITICAL: On API failure, load from localStorage cache if no messages displayed
+        const currentUserId = userIdRef.current;
+        const cacheKey = `chat_messages_${channelKey}`;
+        setChannels(prev => prev.map(ch => {
+          if (ch.key !== channelKey || ch.messages.length > 0) return ch;
+          const cached = getCachedData<Message[]>(cacheKey, currentUserId || undefined);
+          if (cached && cached.length > 0) {
+            console.log(`[V3] API failed, loaded ${cached.length} messages from cache for ${channelKey}`);
+            return { ...ch, messages: cached };
+          }
+          return ch;
+        }));
+        if (forceScroll) setTimeout(() => scrollToBottom(true), 100);
+      }
+    }
+  }, [scrollToBottom]);
+  
+  // Ref to track if we're currently sending (to pause polling)
+  const sendingChannelsRef = useRef<Set<string>>(new Set());
+  
+  // Start polling
+  const startPolling = useCallback(() => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(() => {
+      // Skip polling while sending to avoid race conditions
+      if (activeChannelKey && !sendingChannelsRef.current.has(activeChannelKey)) {
+        loadMessages(activeChannelKey);
+      }
+    }, POLL_INTERVAL);
+  }, [activeChannelKey, loadMessages]);
+  
+  // Initialize
+  useEffect(() => {
+    // Demo mode - load demo data without auth
+    if (isDemo) {
+      if (isWebDemo) {
+        // Web demo: show multi-channel demo with rich data (localized)
+        const localizedMessages = locale === 'en' ? DEMO_MESSAGES_EN 
+          : locale === 'de' ? DEMO_MESSAGES_DE 
+          : DEMO_MESSAGES;
+        const demoChannels: Channel[] = DEMO_CHANNELS.map(ch => ({
+          id: ch.id,
+          key: ch.key,
+          name: ch.name,
+          messages: (localizedMessages[ch.key] || DEMO_MESSAGES[ch.key] || []).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+            authorName: m.authorName,
+            authorType: m.authorType,
+          })),
+          unreadCount: ch.unread,
+        }));
+        setChannels(demoChannels);
+      } else {
+        // Capacitor demo: single channel
+        const channelName = t('v3.channelGeneral');
+        setChannels([{
+          id: 'demo-channel',
+          key: 'general',
+          name: channelName,
+          messages: getDemoMessages(locale)
+        }]);
+      }
+      setIsInitialized(true);
+      return;
+    }
+    
+    if (!isLoaded) return;
+    if (!isSignedIn && !isDemo) {
+      router.push('/sign-in');
+      return;
+    }
+    // Wait for user object to be fully loaded (prevents race condition)
+    if (!user?.id) {
+      console.log('[V3] Waiting for user object to load...');
+      return;
+    }
+    
+    // Initialize user-scoped storage
+    const userId = user.id;
+    const { userChanged } = initUserStorage(userId);
+    if (userChanged) {
+      console.log('[V3] User changed, storage reset for new user');
+    }
+    
+    // Try to load gateway config from server (cross-device sync)
+    const loadGatewayConfig = async () => {
+      try {
+        const params = `?userId=${encodeURIComponent(userId)}`;
+        console.log(`[V3] Loading gateway config for userId: ${userId}`);
+        const res = await fetch(`/api/gateway-config${params}`);
+        console.log(`[V3] Gateway config response: ${res.status}`);
+        if (res.ok) {
+          const data = await res.json();
+          console.log(`[V3] Gateway config data:`, data.gatewayConfig ? 'present' : 'missing');
+          if (data.gatewayConfig?.url && data.gatewayConfig?.token) {
+            // Store in ref for immediate use (no stale closure issues)
+            gatewayConfigRef.current = { url: data.gatewayConfig.url, token: data.gatewayConfig.token };
+            // Sync server config to localStorage
+            setUserStorage(userId, 'gateway_url', data.gatewayConfig.url);
+            setUserStorage(userId, 'gateway_token', data.gatewayConfig.token);
+            console.log(`[V3] Gateway config loaded: ${data.gatewayConfig.url}`);
+            return true;
+          }
+        } else {
+          console.log(`[V3] Gateway config failed: ${res.status} ${await res.text().catch(() => '')}`);
+        }
+      } catch (e: any) {
+        console.log(`[V3] Gateway config error: ${e.message}`);
+      }
+      return false;
+    };
+    
+    // Restore last used channel immediately (from localStorage)
+    const lastChannel = getUserStorage(userId, 'last_channel');
+    if (lastChannel) {
+      setActiveChannelKey(lastChannel.toLowerCase()); // Normalize: all channel keys lowercase
+    }
+    
+    // PARALLEL LOADING for faster initial load
+    // Check subscription status
+    const loadSubscription = async () => {
+      try {
+        const res = await fetch('/api/stripe/subscription');
+        if (res.ok) {
+          const data = await res.json();
+          setSubscription(data);
+          // Show paywall only if free plan and agent limit reached
+          if (data.plan === 'free' || data.status === 'inactive') {
+            setShowPaywall(false); // Don't block — free tier works with 1 agent
+          }
+        }
+      } catch (e) {
+        console.error('[V3] Failed to load subscription:', e);
+      }
+    };
+
+    // Load workspace config if no gateway config found (auto-connect)  
+    const loadWorkspaceConfig = async () => {
+      if (gatewayConfigRef.current) return; // Skip if already configured
+      
+      try {
+        const res = await fetch(`/api/workspaces/user/${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.workspaces.length > 0) {
+            const workspace = data.workspaces[0]; // Use most recent workspace
+            if (workspace.gatewayUrl && workspace.apiKey) {
+              gatewayConfigRef.current = { 
+                url: workspace.gatewayUrl, 
+                token: workspace.apiKey.replace('ws_', '') // Convert workspace key to token format
+              };
+              // Also store in localStorage for consistency
+              setUserStorage(userId, 'gateway_url', workspace.gatewayUrl);
+              setUserStorage(userId, 'gateway_token', workspace.apiKey.replace('ws_', ''));
+              console.log(`[V3] Auto-configured gateway from workspace: ${workspace.name}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[V3] Failed to load workspace config:', e);
+      }
+    };
+
+    // Load main agent name from database
+    const loadMainAgentName = async () => {
+      if (isDemo) return; // Skip in demo mode
+      
+      try {
+        const res = await fetch('/api/agents');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.agents && data.agents.length > 0) {
+            // Find main agent (openclawAgentId = 'main' or first agent)
+            const mainAgent = data.agents.find((a: any) => 
+              a.openclawAgentId === 'main' || a.openclawAgentId === 'orchestrator'
+            ) || data.agents[0];
+            
+            if (mainAgent?.name) {
+              setMainAgentName(mainAgent.name);
+              console.log(`[V3] Main agent name loaded: ${mainAgent.name}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[V3] Failed to load main agent name:', e);
+      }
+    };
+
+    Promise.all([
+      loadGatewayConfig(),
+      loadWorkspaceConfig(), // Try workspace config if gateway config fails
+      loadMainAgentName(), // Load dynamic agent name
+      loadChannels(),
+      loadSubscription(),
+    ]).then(([gatewayLoaded, workspaceLoaded, agentNameLoaded, _]) => {
+      // Check if gateway is configured (from ref, set by server load, or fallback to localStorage)
+      if (!gatewayConfigRef.current) {
+        const gatewayUrl = getUserStorage(userId, 'gateway_url');
+        const gatewayToken = getUserStorage(userId, 'gateway_token');
+        if (gatewayUrl && gatewayToken) {
+          gatewayConfigRef.current = { url: gatewayUrl, token: gatewayToken };
+        }
+      }
+      setIsGatewayConfigured(!!gatewayConfigRef.current);
+      setIsInitialized(true);
+    });
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [isLoaded, isSignedIn, user, router, loadChannels, isDemo, locale]);
+  
+  // Show toast on checkout success/cancel
+  useEffect(() => {
+    if (checkoutStatus === 'success') {
+      setToast({ message: '✅ Abonnement activé ! Bienvenue.', type: 'success' });
+      // Force-sync subscription from Stripe (fallback if webhook delayed)
+      fetch('/api/stripe/sync', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          console.log('[V3] Stripe sync result:', data);
+          // Refresh subscription data after sync
+          return fetch('/api/stripe/subscription');
+        })
+        .then(r => r?.json())
+        .then(data => { if (data?.plan) setSubscription(data); })
+        .catch(err => console.error('[V3] Stripe sync error:', err));
+      // Clean URL
+      window.history.replaceState({}, '', '/v3');
+    } else if (checkoutStatus === 'canceled') {
+      setToast({ message: 'Checkout annulé.', type: 'info' });
+      window.history.replaceState({}, '', '/v3');
+    }
+  }, [checkoutStatus]);
+
+  // Save last used channel when it changes
+  useEffect(() => {
+    if (activeChannelKey && isInitialized && user?.id && !isDemo) {
+      setUserStorage(user.id, 'last_channel', activeChannelKey);
+    }
+  }, [activeChannelKey, isInitialized, user?.id, isDemo]);
+  
+  // Load messages on channel change
+  useEffect(() => {
+    if (activeChannelKey && isInitialized) {
+      // Demo mode: don't load from API, just scroll to bottom
+      if (isDemo) {
+        setTimeout(() => scrollToBottom(true), 100);
+        return;
+      }
+      // Show loading indicator briefly
+      setIsChangingChannel(true);
+      // Reset state for new channel
+      lastMessageCountRef.current = 0;
+      isUserAtBottomRef.current = true;
+      // Force scroll on channel change
+      loadMessages(activeChannelKey, true).finally(() => {
+        // Hide loading indicator after messages loaded
+        setTimeout(() => setIsChangingChannel(false), 100);
+      });
+      startPolling();
+    }
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [activeChannelKey, isInitialized, loadMessages, startPolling, isDemo, scrollToBottom]);
+
+  // Load channel budget when channel changes
+  useEffect(() => {
+    if (!activeChannelKey || isDemo) {
+      setChannelBudget(null);
+      return;
+    }
+    
+    const loadBudget = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (userIdRef.current) headers['x-user-id'] = userIdRef.current;
+        const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelKey)}/budget`, {
+          credentials: 'include',
+          headers,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setChannelBudget({
+            budget: data.budget,
+            used: data.used,
+            isOverBudget: data.isOverBudget,
+          });
+        }
+      } catch (e) {
+        console.log('[V3] Failed to load channel budget');
+      }
+    };
+    
+    loadBudget();
+  }, [activeChannelKey, isDemo]);
+
+  // Mark channel as read when opened (for unread badge)
+  useEffect(() => {
+    if (!activeChannelKey || isDemo || !user?.id) return;
+    
+    const markAsRead = async () => {
+      try {
+        // Find the last message timestamp in this channel
+        const activeChannel = channels.find(ch => ch.key === activeChannelKey);
+        const lastMessageTs = activeChannel?.messages?.length 
+          ? Math.max(...activeChannel.messages.map(m => m.timestamp))
+          : Date.now();
+        
+        const res = await fetch(`/api/channels/${encodeURIComponent(activeChannelKey)}/config`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-clerk-user-id': user.id 
+          },
+          credentials: 'include',
+          body: JSON.stringify({ markAsRead: true, lastMessageTimestamp: lastMessageTs })
+        });
+        if (!res.ok) {
+          console.log('[V3] markAsRead failed:', res.status, await res.text());
+        }
+        // Update local state to remove unread badge
+        setChannels(prev => prev.map(ch => 
+          ch.key === activeChannelKey ? { ...ch, unreadCount: 0 } : ch
+        ));
+      } catch (e) {
+        console.log('[V3] Failed to mark channel as read:', e);
+      }
+    };
+    
+    // Small delay to ensure channel is actually being viewed
+    const timeout = setTimeout(markAsRead, 500);
+    return () => clearTimeout(timeout);
+  }, [activeChannelKey, isDemo, user?.id, channels]);
+  
+  // Refresh unread counts from API (preserves messages, only updates unreadCount)
+  const refreshUnreadCounts = useCallback(async () => {
+    if (isDemo || !user?.id) return;
+    try {
+      const params = `?userId=${encodeURIComponent(user.id)}`;
+      const response = await fetch(`/api/channels${params}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data.channels) return;
+      
+      // Update only unreadCount, preserve everything else
+      const unreadMap = new Map(data.channels.map((ch: any) => [ch.key, ch.unreadCount || 0]));
+      setChannels(prev => prev.map(ch => ({
+        ...ch,
+        unreadCount: ch.key === activeChannelKey ? 0 : (unreadMap.get(ch.key) ?? ch.unreadCount ?? 0)
+      })));
+    } catch (e) {
+      console.log('[V3] Failed to refresh unread counts');
+    }
+  }, [isDemo, user?.id, activeChannelKey]);
+
+  // Refresh messages when app becomes visible (returning from another tab)
+  useEffect(() => {
+    if (!isInitialized || isDemo || !activeChannelKey) return;
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[V3] App became visible - refreshing messages');
+        // Force reload messages from DB
+        loadMessages(activeChannelKey, false);
+        // Also refresh unread counts for other channels
+        refreshUnreadCounts();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isInitialized, isDemo, activeChannelKey, loadMessages, refreshUnreadCounts]);
+  
+  // Periodically refresh unread counts (every 60 seconds)
+  useEffect(() => {
+    if (!isInitialized || isDemo) return;
+    
+    const interval = setInterval(refreshUnreadCounts, 60000);
+    return () => clearInterval(interval);
+  }, [isInitialized, isDemo, refreshUnreadCounts]);
+  
+  // Bidirectional sync: run after initial load and periodically
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!isInitialized || isDemo || !user?.id) return;
+    
+    // Run initial sync after 2 seconds (let messages load first)
+    const initialSyncTimer = setTimeout(async () => {
+      if (channels.length > 0) {
+        console.log('[V3] Running initial bidirectional sync...');
+        const result = await syncAllChannels(channels);
+        if (result.pulled > 0) {
+          // Only update with PULLED messages (new from DB), don't overwrite local state
+          // This prevents losing messages that arrived via polling during sync
+          setChannels(prev => prev.map(ch => {
+            const mergedCh = result.merged.find(m => m.key === ch.key);
+            if (!mergedCh) return ch;
+            // Merge: keep all current messages + add any truly new ones from sync
+            const currentIds = new Set(ch.messages.map(m => `${m.role}-${m.timestamp}`));
+            const newMessages = mergedCh.messages.filter(m => !currentIds.has(`${m.role}-${m.timestamp}`));
+            if (newMessages.length === 0) return ch;
+            return { ...ch, messages: [...ch.messages, ...newMessages].sort((a, b) => a.timestamp - b.timestamp) };
+          }));
+          console.log(`[V3] Sync complete: ${result.pushed} pushed, ${result.pulled} pulled`);
+        }
+      }
+    }, 2000);
+    
+    // Run periodic sync every 2 minutes
+    syncIntervalRef.current = setInterval(async () => {
+      if (channels.length > 0) {
+        const result = await syncAllChannels(channels);
+        if (result.pulled > 0) {
+          // Only update with PULLED messages, preserve current state
+          setChannels(prev => prev.map(ch => {
+            const mergedCh = result.merged.find(m => m.key === ch.key);
+            if (!mergedCh) return ch;
+            const currentIds = new Set(ch.messages.map(m => `${m.role}-${m.timestamp}`));
+            const newMessages = mergedCh.messages.filter(m => !currentIds.has(`${m.role}-${m.timestamp}`));
+            if (newMessages.length === 0) return ch;
+            return { ...ch, messages: [...ch.messages, ...newMessages].sort((a, b) => a.timestamp - b.timestamp) };
+          }));
+        }
+      }
+    }, 120000); // 2 minutes
+    
+    return () => {
+      clearTimeout(initialSyncTimer);
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    };
+  }, [isInitialized, isDemo, user?.id, channels.length > 0]); // Only re-run when initialized or channels exist
+  
+  // Poll agent activity and status (fast polling for real-time updates)
+  useEffect(() => {
+    // Demo mode: use fake activity data
+    if (isDemo) {
+      const now = Date.now();
+      const demoLogs: ActivityLog[] = [
+        { id: 'demo-1', timestamp: now - 60000, type: 'action', message: t('v3.demoActivity1') },
+        { id: 'demo-2', timestamp: now - 300000, type: 'info', message: t('v3.demoActivity2') },
+        { id: 'demo-3', timestamp: now - 600000, type: 'action', message: t('v3.demoActivity3') },
+      ];
+      setAgentStatus('online');
+      setCurrentTask(null);
+      setActivityLogs(demoLogs);
+      return;
+    }
+    
+    const fetchActivityData = async () => {
+      try {
+        // Fetch real-time agent status (activity, task, online/working/offline)
+        const statusRes = await fetch('/api/agent-status');
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          setAgentStatus(statusData.status || 'offline');
+          setCurrentTask(statusData.activity || statusData.task || null);
+        }
+        
+        // Fetch activity logs (less critical, can be slower)
+        const logsRes = await fetch('/api/agent-log?limit=5');
+        if (logsRes.ok) {
+          const data = await logsRes.json();
+          setActivityLogs(data.logs || []);
+        }
+      } catch (e) {
+        console.error('[V3] Failed to fetch activity data:', e);
+      }
+    };
+    
+    fetchActivityData();
+    activityPollRef.current = setInterval(fetchActivityData, 5000); // 5s for real-time updates
+    
+    return () => {
+      if (activityPollRef.current) clearInterval(activityPollRef.current);
+    };
+  }, [isDemo, locale]);
+  
+  // Show push notification banner if not subscribed
+  useEffect(() => {
+    // Hide banner if already subscribed or permission granted
+    if (isSubscribed || permission === 'granted') {
+      setShowPushBanner(false);
+      return;
+    }
+    // Show banner after 5s if not subscribed and permission not yet asked
+    if (isInitialized && isSupported && permission === 'default' && !isSubscribed) {
+      const timer = setTimeout(() => setShowPushBanner(true), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, isSupported, permission, isSubscribed]);
+  
+  // Run OCR on an image to extract text (for screenshots)
+  const runOcr = async (imageDataUrl: string): Promise<string> => {
+    try {
+      console.log('[OCR] Starting text extraction...');
+      // Lazy-load Tesseract to avoid bundling issues
+      const Tesseract = await import('tesseract.js');
+      const result = await Tesseract.recognize(imageDataUrl, 'fra+eng', {
+        logger: (m: { status: string; progress: number }) => {
+          if (m.status === 'recognizing text') {
+            console.log(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
+          }
+        }
+      });
+      const text = result.data.text.trim();
+      console.log(`[OCR] Extracted ${text.length} characters`);
+      return text;
+    } catch (err) {
+      console.error('[OCR] Error:', err);
+      return '';
+    }
+  };
+
+  // Handle file upload (images and documents)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    for (const file of Array.from(files)) {
+      if (file.size > 50 * 1024 * 1024) {
+        setError({ message: 'Fichier trop grand (max 50MB)' });
+        continue;
+      }
+      
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      
+      if (isVideo) {
+        // Videos: upload directly (too large for data URL in memory)
+        if (pendingImages.length < 5) {
+          const objectUrl = URL.createObjectURL(file);
+          setPendingImages(prev => [...prev, objectUrl]);
+          setPendingOcrTexts(prev => [...prev, '']);
+          // Store the File object for later upload
+          (window as any).__pendingVideoFiles = (window as any).__pendingVideoFiles || {};
+          (window as any).__pendingVideoFiles[objectUrl] = file;
+        }
+        continue;
+      }
+      
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target?.result as string || '');
+        reader.readAsDataURL(file);
+      });
+      
+      if (!dataUrl) continue;
+      
+      if (isImage) {
+        if (pendingImages.length < 5) {
+          setPendingImages(prev => [...prev, dataUrl]);
+          
+          // Run OCR in background for screenshots
+          setIsOcrProcessing(true);
+          const ocrText = await runOcr(dataUrl);
+          setPendingOcrTexts(prev => [...prev, ocrText]);
+          setIsOcrProcessing(false);
+        }
+      } else {
+        if (pendingFiles.length < 5) {
+          setPendingFiles(prev => [...prev, { 
+            name: file.name, 
+            type: file.type || 'application/octet-stream',
+            dataUrl 
+          }]);
+        }
+      }
+    }
+    
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  };
+  
+  // Remove pending image and its OCR text
+  const removePendingImage = (index: number) => {
+    setPendingImages(prev => prev.filter((_, i) => i !== index));
+    setPendingOcrTexts(prev => prev.filter((_, i) => i !== index));
+  };
+  
+  // Remove pending file
+  const removePendingFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Drag & drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    // Allowed file types (same as file input accept)
+    const allowedExtensions = ['.txt', '.md', '.json', '.log', '.rb', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.xml', '.yaml', '.yml', '.csv', '.pdf', '.mp4', '.webm', '.mov', '.m4v'];
+    const allowedMimeTypes = [
+      'image/', 'video/', 'text/', 'application/json', 'application/pdf',
+      'application/javascript', 'application/xml', 'application/x-yaml'
+    ];
+    
+    const isAllowedFile = (file: File) => {
+      // Check by mime type
+      if (allowedMimeTypes.some(mime => file.type.startsWith(mime))) return true;
+      // Check by extension (fallback for files with no mime type)
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      return allowedExtensions.includes(ext);
+    };
+
+    const files = Array.from(e.dataTransfer.files).filter(isAllowedFile);
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      if (file.size > 50 * 1024 * 1024) {
+        setError({ message: 'Fichier trop grand (max 50MB)' });
+        continue;
+      }
+      
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      
+      if (isVideo) {
+        if (pendingImages.length < 5) {
+          const objectUrl = URL.createObjectURL(file);
+          setPendingImages(prev => [...prev, objectUrl]);
+          (window as any).__pendingVideoFiles = (window as any).__pendingVideoFiles || {};
+          (window as any).__pendingVideoFiles[objectUrl] = file;
+        }
+        continue;
+      }
+      
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target?.result as string || '');
+        reader.readAsDataURL(file);
+      });
+      
+      if (!dataUrl) continue;
+      
+      if (isImage) {
+        if (pendingImages.length < 5) {
+          setPendingImages(prev => [...prev, dataUrl]);
+        }
+      } else {
+        if (pendingFiles.length < 5) {
+          setPendingFiles(prev => [...prev, { 
+            name: file.name, 
+            type: file.type || 'application/octet-stream',
+            dataUrl 
+          }]);
+        }
+      }
+    }
+  }, [pendingImages.length, pendingFiles.length]);
+  
+  // Helper: Convert base64 data URL to File
+  const dataUrlToFile = (dataUrl: string, filename: string): File => {
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  };
+
+  // Helper: Upload image to Vercel Blob
+  const uploadImage = async (dataUrl: string, index: number): Promise<string> => {
+    console.log(`[Upload] Starting media ${index} upload...`);
+    
+    // Check if this is a video object URL (stored File reference)
+    const pendingVideoFile = (window as any).__pendingVideoFiles?.[dataUrl];
+    let file: File;
+    if (pendingVideoFile) {
+      file = pendingVideoFile;
+      delete (window as any).__pendingVideoFiles[dataUrl];
+      URL.revokeObjectURL(dataUrl);
+    } else {
+      const isVideoData = dataUrl.startsWith('data:video/');
+      const ext = isVideoData ? (dataUrl.startsWith('data:video/mp4') ? 'mp4' : dataUrl.startsWith('data:video/webm') ? 'webm' : 'mp4') : 'jpg';
+      const prefix = isVideoData ? 'video' : 'image';
+      file = dataUrlToFile(dataUrl, `${prefix}-${Date.now()}-${index}.${ext}`);
+    }
+    console.log(`[Upload] File created: ${file.name}, size: ${file.size} bytes`);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    console.log(`[Upload] Response status: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'unknown');
+      console.error(`[Upload] Failed: ${errorText}`);
+      throw new Error(`Failed to upload image: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`[Upload] Success: ${data.url}`);
+    return data.url;
+  };
+
+  // Helper: Upload audio to Vercel Blob
+  const uploadAudio = async (blob: Blob): Promise<string> => {
+    const file = new File([blob], `audio-${Date.now()}.webm`, { type: blob.type });
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to upload audio');
+    }
+    
+    const data = await response.json();
+    return data.url;
+  };
+
+  // Helper: Upload document file to Vercel Blob
+  const uploadFile = async (fileData: { name: string; type: string; dataUrl: string }): Promise<{ url: string; name: string }> => {
+    const file = dataUrlToFile(fileData.dataUrl, fileData.name);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to upload file');
+    }
+    
+    const data = await response.json();
+    return { url: data.url, name: fileData.name };
+  };
+
+  // Start audio recording
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setPendingAudio({ blob: audioBlob, url: audioUrl });
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Clear timer
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        setRecordingDuration(0);
+      };
+      
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      
+      // Start duration timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+    } catch (err) {
+      console.error('[V3] Failed to start recording:', err);
+      setError({ message: 'Impossible d\'accéder au microphone. Vérifiez les permissions.' });
+    }
+  }, []);
+
+  // Stop audio recording
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, [isRecording]);
+
+  // Cancel audio recording
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    setPendingAudio(null);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setRecordingDuration(0);
+  }, [isRecording]);
+
+  // Remove pending audio
+  const removePendingAudio = useCallback(() => {
+    if (pendingAudio?.url) {
+      URL.revokeObjectURL(pendingAudio.url);
+    }
+    setPendingAudio(null);
+  }, [pendingAudio]);
+
+  // Add message to queue (per-channel: max 2 queued messages per channel)
+  const addToQueue = useCallback(() => {
+    if (!input.trim() && pendingImages.length === 0 && !pendingAudio) return false;
+    
+    // Count queued messages for the ACTIVE channel only
+    const channelQueueCount = queuedMessages.filter(m => m.channelKey === activeChannelKey).length;
+    if (channelQueueCount >= 2) {
+      setError({ message: 'Queue pleine pour ce channel (max 2 messages). Attendez ou supprimez un message.' });
+      return false;
+    }
+    
+    const queuedMsg: QueuedMessage = {
+      id: `queued-${Date.now()}`,
+      channelKey: activeChannelKey,
+      content: input.trim(),
+      images: [...pendingImages],
+      ocrTexts: [...pendingOcrTexts],
+      audio: pendingAudio || undefined,
+      timestamp: Date.now(),
+      replyTo: replyToMessage ? {
+        id: replyToMessage.id,
+        content: (replyToMessage.content || '').slice(0, 200) + ((replyToMessage.content || '').length > 200 ? '...' : ''),
+        role: replyToMessage.role
+      } : undefined,
+    };
+    
+    setQueuedMessages(prev => [...prev, queuedMsg]);
+    setInput('');
+    setPendingImages([]);
+    setPendingOcrTexts([]);
+    setPendingAudio(null);
+    setReplyToMessage(null);
+    
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = '44px';
+    }
+    
+    return true;
+  }, [input, pendingImages, pendingAudio, queuedMessages, activeChannelKey, replyToMessage]);
+
+  // Remove message from queue
+  const removeFromQueue = useCallback((id: string) => {
+    setQueuedMessages(prev => prev.filter(m => m.id !== id));
+  }, []);
+
+  // Load roadmap tasks for linking
+  const loadRoadmapTasks = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {};
+      const currentUserId = userIdRef.current;
+      if (currentUserId) {
+        headers['x-user-id'] = currentUserId;
+      }
+      const response = await fetch('/api/roadmap', { headers });
+      if (!response.ok) return;
+      const data = await response.json();
+      // Filter to show only non-done tasks
+      const activeTasks = (data.tasks || [])
+        .filter((t: any) => t.status !== 'done')
+        .map((t: any) => ({ id: t.id, title: t.title, status: t.status }));
+      setRoadmapTasks(activeTasks);
+    } catch (e) {
+      console.error('[V3] Failed to load roadmap tasks:', e);
+    }
+  }, []);
+
+  // Open link to task modal
+  const openLinkToTask = useCallback((message: Message) => {
+    loadRoadmapTasks();
+    setLinkToTaskModal({ open: true, message });
+  }, [loadRoadmapTasks]);
+
+  // Add reaction to a message
+  const addReaction = useCallback((messageId: string, emoji: string) => {
+    setChannels(prev => prev.map(ch => ({
+      ...ch,
+      messages: ch.messages.map(msg => {
+        if (msg.id !== messageId) return msg;
+        const currentReactions = msg.reactions || [];
+        // Toggle: if already reacted with this emoji, remove it
+        if (currentReactions.includes(emoji)) {
+          return { ...msg, reactions: currentReactions.filter(r => r !== emoji) };
+        }
+        // Add new reaction
+        return { ...msg, reactions: [...currentReactions, emoji] };
+      })
+    })));
+    setReactionPickerMessageId(null);
+  }, []);
+
+  // Link message to task (add as comment)
+  const linkMessageToTask = useCallback(async (taskId: string) => {
+    const message = linkToTaskModal.message;
+    if (!message) return;
+    
+    try {
+      const response = await fetch(`/api/roadmap/${taskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `💬 **Feedback du chat :**\n\n${message.content}`,
+          author: 'user',
+          images: message.images || [],
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to link message');
+      
+      setLinkToTaskModal({ open: false, message: null });
+      setError(null);
+      showToast('Message lié à la tâche ! ✓', 'success');
+    } catch (e) {
+      console.error('[V3] Failed to link message to task:', e);
+      setError({ message: 'Erreur lors de la liaison' });
+    }
+  }, [linkToTaskModal.message]);
+
+  // Send message (can be from queue)
+  const sendMessage = async (fromQueue?: QueuedMessage) => {
+    if (isWebDemo) {
+      demoGate.requireAuth('envoyer un message');
+      return;
+    }
+    // IMPORTANT: Use the queue message's channel if from queue, otherwise active channel
+    // This prevents issues when user navigates to another channel while queue processes
+    const targetChannelKey = fromQueue?.channelKey || activeChannelKey;
+    
+    // Demo mode - simulate response without API calls
+    if (isDemo) {
+      const messageContent = fromQueue ? fromQueue.content : input.trim();
+      if (!messageContent) return;
+      
+      setInput('');
+      const userMsg: Message = { id: `demo-user-${Date.now()}`, role: 'user', content: messageContent, timestamp: Date.now() };
+      setChannels(prev => prev.map(ch => ch.key === targetChannelKey ? { ...ch, messages: [...ch.messages, userMsg] } : ch));
+      
+      setLoadingChannels(prev => new Set(prev).add(targetChannelKey));
+      setTimeout(() => {
+        const responses = [
+          "Je suis en mode démonstration. Dans la version complète, je serais connecté à ton agent OpenClaw et pourrais effectuer des actions réelles ! 🚀",
+          "C'est une excellente question ! En mode normal, j'aurais accès à toutes les fonctionnalités de ton agent OpenClaw.",
+          "Bien reçu ! 👍 En production, ton message serait traité par ton assistant personnel.",
+        ];
+        const assistantMsg: Message = { 
+          id: `demo-assistant-${Date.now()}`, 
+          role: 'assistant', 
+          content: responses[Math.floor(Math.random() * responses.length)], 
+          timestamp: Date.now() 
+        };
+        setChannels(prev => prev.map(ch => ch.key === targetChannelKey ? { ...ch, messages: [...ch.messages, assistantMsg] } : ch));
+        setLoadingChannels(prev => { const s = new Set(prev); s.delete(targetChannelKey); return s; });
+      }, 1500);
+      return;
+    }
+    
+    // Check if channel budget is exceeded
+    if (channelBudget?.isOverBudget) {
+      const budgetMsg = `${t('v3.budgetExceeded')} ($${channelBudget.used.toFixed(2)} / $${channelBudget.budget?.toFixed(2)})`;
+      showToast(budgetMsg, 'info');
+      return;
+    }
+
+    // If loading and trying to send new input, add to queue instead
+    if (isLoading && !fromQueue) {
+      if (input.trim() || pendingImages.length > 0 || pendingAudio) {
+        addToQueue();
+      }
+      return;
+    }
+    
+    // Determine what to send
+    const messageContent = fromQueue ? fromQueue.content : input.trim();
+    const messageImages = fromQueue ? (fromQueue.images || []) : [...pendingImages];
+    const messageOcrTexts = fromQueue ? (fromQueue.ocrTexts || []) : [...pendingOcrTexts];
+    const messageFiles = fromQueue ? (fromQueue.files || []) : [...pendingFiles];
+    const messageAudio = fromQueue ? fromQueue.audio : pendingAudio;
+    
+    if (!messageContent && messageImages.length === 0 && messageFiles.length === 0 && !messageAudio) return;
+    
+    // Clear input if not from queue
+    if (!fromQueue) {
+      setInput('');
+      setPendingImages([]);
+      setPendingOcrTexts([]);
+      setPendingFiles([]);
+      setPendingAudio(null);
+    } else {
+      // Remove from queue
+      setQueuedMessages(prev => prev.filter(m => m.id !== fromQueue.id));
+    }
+    
+    setLoadingChannels(prev => new Set(prev).add(targetChannelKey));
+    sendingChannelsRef.current.add(targetChannelKey); // Pause polling for this channel
+    setError(null);
+    
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = '44px';
+    }
+    
+    // Get replyTo from queue or current state
+    const messageReplyTo = fromQueue?.replyTo || (replyToMessage ? {
+      id: replyToMessage.id,
+      content: (replyToMessage.content || '').slice(0, 200) + ((replyToMessage.content || '').length > 200 ? '...' : ''),
+      role: replyToMessage.role
+    } : undefined);
+    
+    // Capture linkedTask before it gets reset
+    const messageLinkedTask = preLinkedTask && !fromQueue ? { id: preLinkedTask.id, title: preLinkedTask.title } : undefined;
+    
+    const userMessage: Message = {
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content: messageContent,
+      timestamp: Date.now(),
+      images: messageImages.length > 0 ? messageImages : undefined,
+      audio: messageAudio?.url,
+      replyTo: messageReplyTo,
+      linkedTask: messageLinkedTask,
+      synced: true, // Mark as synced since we'll push to DB immediately
+    };
+    
+    // Clear replyTo and linkedTask after capturing them
+    if (!fromQueue) {
+      setReplyToMessage(null);
+      setPreLinkedTask(null); // Reset immediately so UI updates
+    }
+    
+    setChannels(prev => prev.map(ch => 
+      ch.key === targetChannelKey 
+        ? { ...ch, messages: [...ch.messages, userMessage] }
+        : ch
+    ));
+    // Force scroll when user sends message, and flag for next update
+    shouldScrollOnNextUpdateRef.current = true;
+    scrollToBottom(true);
+    
+    try {
+      // Upload images to Vercel Blob and get public URLs
+      let imageUrls: string[] = [];
+      if (messageImages.length > 0) {
+        setError({ message: 'Uploading images...' });
+        imageUrls = await Promise.all(
+          messageImages.map((img, idx) => uploadImage(img, idx))
+        );
+        setError(null);
+        console.log('[V3] Uploaded images:', imageUrls);
+        
+        // Update user message in state with Vercel Blob URLs (not base64)
+        setChannels(prev => prev.map(ch => {
+          if (ch.key !== targetChannelKey) return ch;
+          return {
+            ...ch,
+            messages: ch.messages.map(m => 
+              m.id === userMessage.id ? { ...m, images: imageUrls } : m
+            )
+          };
+        }));
+      }
+      
+      // Upload audio to Vercel Blob and transcribe with Whisper
+      let audioUrl: string | undefined;
+      let audioTranscript: string | undefined;
+      if (messageAudio) {
+        setError({ message: 'Uploading audio...' });
+        audioUrl = await uploadAudio(messageAudio.blob);
+        console.log('[V3] Uploaded audio:', audioUrl);
+        
+        // Transcribe audio with Whisper
+        setError({ message: '🎤 Transcription en cours...' });
+        try {
+          const transcribeRes = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioUrl }),
+          });
+          if (transcribeRes.ok) {
+            const transcribeData = await transcribeRes.json();
+            audioTranscript = transcribeData.text;
+            console.log('[V3] Transcription:', audioTranscript?.slice(0, 100));
+          } else {
+            console.warn('[V3] Transcription failed, using audio URL only');
+          }
+        } catch (e) {
+          console.warn('[V3] Transcription error:', e);
+        }
+        setError(null);
+        
+        // Update user message in state with Vercel Blob URL
+        setChannels(prev => prev.map(ch => {
+          if (ch.key !== targetChannelKey) return ch;
+          return {
+            ...ch,
+            messages: ch.messages.map(m => 
+              m.id === userMessage.id ? { ...m, audio: audioUrl } : m
+            )
+          };
+        }));
+      }
+      
+      // Upload files to Vercel Blob and get public URLs
+      let fileUrls: { url: string; name: string }[] = [];
+      if (messageFiles.length > 0) {
+        setError({ message: 'Uploading files...' });
+        fileUrls = await Promise.all(
+          messageFiles.map((f) => uploadFile(f))
+        );
+        setError(null);
+        console.log('[V3] Uploaded files:', fileUrls);
+      }
+      
+      // Build message text with image, audio, and file URLs
+      let finalMessageContent = messageContent;
+      
+      // Add reply context if present
+      if (messageReplyTo) {
+        const replyContext = `↩️ En réponse à (${messageReplyTo.role === 'assistant' ? agentName : 'moi'}):\n"${messageReplyTo.content}"\n\n`;
+        finalMessageContent = replyContext + finalMessageContent;
+      }
+      
+      if (imageUrls.length > 0) {
+        // Include URLs and OCR text (extracted text from screenshots)
+        const imageText = imageUrls.map((url, i) => {
+          const ocrText = messageOcrTexts[i];
+          if (ocrText && ocrText.length > 10) {
+            return `📷 Image ${i + 1}: ${url}\n📝 Texte extrait (OCR):\n\`\`\`\n${ocrText}\n\`\`\``;
+          }
+          return `📷 Image ${i + 1}: ${url}`;
+        }).join('\n\n');
+        finalMessageContent = finalMessageContent 
+          ? `${finalMessageContent}\n\n${imageText}`
+          : imageText;
+        console.log('[V3] Images attached:', imageUrls.length, 'with OCR:', messageOcrTexts.filter(t => t).length);
+      }
+      if (fileUrls.length > 0) {
+        const fileText = fileUrls.map((f) => `📄 ${f.name}: ${f.url}`).join('\n');
+        finalMessageContent = finalMessageContent 
+          ? `${finalMessageContent}\n\n${fileText}`
+          : fileText;
+      }
+      if (audioUrl || audioTranscript) {
+        // Use transcription if available, otherwise fallback to audio URL
+        const audioText = audioTranscript 
+          ? `🎤 Message vocal:\n"${audioTranscript}"\n\n(Audio: ${audioUrl})`
+          : `🎤 Audio: ${audioUrl}`;
+        finalMessageContent = finalMessageContent 
+          ? `${finalMessageContent}\n\n${audioText}`
+          : audioTranscript || audioText; // If only transcript, use it directly
+      }
+      
+      // Save user message to DB with Vercel Blob URLs
+      const saveRes = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelName: targetChannelKey,
+          userId: userIdRef.current,
+          isForwarded: true, // Already forwarded via /api/chat — don't QStash forward again
+          message: { 
+            role: 'user', 
+            content: messageContent, 
+            timestamp: userMessage.timestamp,
+            images: imageUrls.length > 0 ? imageUrls : undefined,
+            audio: audioUrl,
+            replyTo: messageReplyTo
+          }
+        })
+      });
+      
+      // Replace temp ID with real DB ID immediately → prevents flash on next poll
+      if (saveRes.ok) {
+        try {
+          const saveData = await saveRes.json();
+          const realId = saveData.message?.id;
+          if (realId) {
+            setChannels(prev => prev.map(ch => {
+              if (ch.key !== targetChannelKey) return ch;
+              return {
+                ...ch,
+                messages: ch.messages.map(m =>
+                  m.id === userMessage.id ? { ...m, id: realId, synced: true } : m
+                )
+              };
+            }));
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      
+      // Cache messages locally so they survive page reload
+      const cacheKey = `chat_messages_${targetChannelKey}`;
+      const currentUserId = userIdRef.current;
+      setChannels(prev => {
+        const ch = prev.find(c => c.key === targetChannelKey);
+        if (ch) {
+          setCachedData(cacheKey, ch.messages, currentUserId || undefined);
+        }
+        return prev;
+      });
+      
+      // Link message to pre-selected task (if any)
+      if (preLinkedTask && !fromQueue) {
+        try {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          const currentUserId = userIdRef.current;
+          if (currentUserId) {
+            headers['x-user-id'] = currentUserId;
+          }
+          const linkRes = await fetch(`/api/roadmap/${preLinkedTask.id}/comments`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              content: `💬 **Feedback du chat :**\n\n${messageContent}`,
+              author: 'user',
+              images: imageUrls.length > 0 ? imageUrls : [],
+            })
+          });
+          if (!linkRes.ok) {
+            console.error('[V3] Failed to link message:', await linkRes.text());
+          }
+          // Note: preLinkedTask already reset above for immediate UI update
+        } catch (e) {
+          console.error('[V3] Failed to link message to task:', e);
+        }
+      }
+      
+      // Use gateway config from ref (loaded from server) - more reliable than localStorage
+      const gatewayConfig = gatewayConfigRef.current;
+      if (!gatewayConfig?.url || !gatewayConfig?.token) {
+        throw new Error('Configure le Gateway → clique sur ⚙️');
+      }
+      const gatewayUrl = gatewayConfig.url;
+      const gatewayToken = gatewayConfig.token;
+      
+      // Add assistant placeholder - capture timestamp for consistent save later
+      const assistantTimestamp = Date.now();
+      const assistantMessage: Message = {
+        id: `temp-assistant-${assistantTimestamp}`,
+        role: 'assistant',
+        content: '',
+        timestamp: assistantTimestamp,
+      };
+      
+      setChannels(prev => prev.map(ch => 
+        ch.key === targetChannelKey 
+          ? { ...ch, messages: [...ch.messages, assistantMessage] }
+          : ch
+      ));
+      
+      // Build message for API - TEXT ONLY with image URLs embedded
+      const apiMessages: any[] = [{ role: 'user', content: finalMessageContent }];
+      
+      console.log(`[Chat] Sending to gateway: ${gatewayUrl}`);
+      console.log(`[Chat] Message length: ${finalMessageContent.length} chars`);
+      
+      // Use Vercel proxy (CORS prevents direct browser connection)
+      const chatHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (clerkUserId) chatHeaders['x-clerk-user-id'] = clerkUserId;
+      
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: chatHeaders,
+        credentials: 'include', // Send Clerk cookies for auth
+        body: JSON.stringify({
+          gatewayUrl,
+          token: gatewayToken,
+          messages: apiMessages,
+          stream: true,
+          channelKey: targetChannelKey // Track usage per channel
+        })
+      });
+      
+      console.log(`[Chat] Response status: ${response.status}`);
+      
+      // Handle 202 Accepted (agent busy, message queued)
+      if (response.status === 202) {
+        const queueInfo = await response.json().catch(() => ({}));
+        console.log(`[Chat] Agent busy - queued at position ${queueInfo.position}`);
+        
+        // Show user feedback
+        setError({ 
+          message: `⏳ Agent occupé - Message en file d'attente (position ${queueInfo.position || '?'})`,
+          isWarning: true 
+        });
+        
+        // BUGFIX: Save message data for retry (input has already been cleared at this point)
+        // Create a QueuedMessage from current message data to preserve content
+        const retryMessage: QueuedMessage = fromQueue || {
+          id: `retry-${Date.now()}`,
+          channelKey: targetChannelKey,
+          content: messageContent,
+          images: messageImages.length > 0 ? messageImages : undefined,
+          ocrTexts: messageOcrTexts.length > 0 ? messageOcrTexts : undefined,
+          audio: messageAudio ? { url: messageAudio.url } : undefined,
+          files: messageFiles.length > 0 ? messageFiles : undefined,
+          replyTo: replyToMessage ? { id: replyToMessage.id, content: replyToMessage.content, role: replyToMessage.role } : undefined,
+        };
+        
+        // Auto-retry after delay (agent should be free eventually)
+        const retryDelay = Math.min(5000 + (queueInfo.position || 1) * 2000, 30000);
+        setTimeout(() => {
+          console.log(`[Chat] Retrying queued message after ${retryDelay}ms (content: "${retryMessage.content.slice(0, 50)}...")`);
+          // Re-send the message with preserved data
+          sendMessage(retryMessage);
+        }, retryDelay);
+        
+        return; // Don't continue with streaming
+      }
+      
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Gateway error' }));
+        console.error(`[Chat] Error response:`, err);
+        throw new Error(err.error || 'Gateway error');
+      }
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content || '';
+                if (content) {
+                  fullContent += content;
+                  setChannels(prev => prev.map(ch => {
+                    if (ch.key !== targetChannelKey) return ch;
+                    const msgs = [...ch.messages];
+                    const lastIdx = msgs.length - 1;
+                    if (msgs[lastIdx]?.role === 'assistant') {
+                      msgs[lastIdx] = { ...msgs[lastIdx], content: fullContent };
+                    }
+                    return { ...ch, messages: msgs };
+                  }));
+                }
+              } catch {}
+            }
+          }
+        }
+      }
+      
+      // Filter out NO_REPLY / HEARTBEAT_OK / empty responses - agent chose not to respond
+      const trimmedContent = fullContent.trim();
+      const isSilentResponse = !trimmedContent || trimmedContent === 'NO_REPLY' || trimmedContent === 'HEARTBEAT_OK';
+      
+      if (isSilentResponse) {
+        // Replace the empty assistant placeholder with a "no response" system message
+        setChannels(prev => prev.map(ch => {
+          if (ch.key !== targetChannelKey) return ch;
+          const filtered = ch.messages.filter(m => !(m.role === 'assistant' && !m.content?.trim()));
+          filtered.push({
+            id: `no-response-${Date.now()}`,
+            role: 'assistant' as const,
+            content: '⚠️ Agent n\'a pas répondu. Il est peut-être indisponible ou surchargé.',
+            timestamp: Date.now(),
+            authorType: 'system',
+            authorName: '⚙️ Système',
+          });
+          return { ...ch, messages: filtered };
+        }));
+      } else if (fullContent) {
+        // KEEP the streaming message visible — DON'T delete it.
+        // The next poll will bring the DB version, and the merge logic
+        // will match it by timestamp+role and seamlessly replace the temp.
+        // Previously we deleted it here → flash (message disappears 3-10s).
+        console.log('[V3] Streaming complete, keeping temp assistant message visible until poll syncs');
+      }
+      
+    } catch (e: any) {
+      // Check if this is a gateway error (message was saved) or config error (message not saved)
+      const isGatewayError = e.message !== 'Configure le Gateway → clique sur ⚙️';
+      console.error('[V3] Error:', e.message); // Debug
+      
+      // Show error IN the chat as a system message (not just a toast)
+      if (isGatewayError) {
+        const errorContent = e.message?.startsWith('❌') ? e.message : `❌ ${e.message || 'Agent indisponible'}`;
+        setChannels(prev => prev.map(ch => {
+          if (ch.key !== targetChannelKey) return ch;
+          // Replace the empty assistant placeholder with the error message
+          const msgs = ch.messages.filter(m => 
+            m.content !== '' || m.role === 'user' || m.images?.length || m.audio
+          );
+          msgs.push({
+            id: `error-${Date.now()}`,
+            role: 'assistant' as const,
+            content: errorContent,
+            timestamp: Date.now(),
+            authorType: 'system',
+            authorName: '⚙️ Système',
+          });
+          return { ...ch, messages: msgs };
+        }));
+      } else {
+        setError({ message: e.message, messageSent: false, canRetry: false, retryData: undefined });
+        // Remove only the empty assistant placeholder
+        setChannels(prev => {
+          const updated = prev.map(ch => 
+            ch.key === targetChannelKey 
+              ? { ...ch, messages: ch.messages.filter(m => 
+                  m.content !== '' || m.role === 'user' || m.images?.length || m.audio
+                )}
+              : ch
+          );
+          const chFound = updated.find(c => c.key === targetChannelKey);
+          if (chFound) {
+            const cacheKey = `chat_messages_${targetChannelKey}`;
+            setCachedData(cacheKey, chFound.messages, userIdRef.current || undefined);
+          }
+          return updated;
+        });
+      }
+    } finally {
+      setLoadingChannels(prev => { const s = new Set(prev); s.delete(targetChannelKey); return s; });
+      // Delay resuming polling to avoid flash: the message needs time to propagate to DB
+      // Without this delay, the next poll may not include the new message yet → flash
+      setTimeout(() => {
+        sendingChannelsRef.current.delete(targetChannelKey); // Resume polling for this channel
+      }, 3000);
+      // Only scroll if user is at bottom (don't force if they scrolled away)
+      scrollToBottom(false);
+    }
+  };
+  
+  // Process queue when loading ends — per channel
+  useEffect(() => {
+    // Find the first queued message for a channel that is NOT loading
+    const nextMsg = queuedMessages.find(m => !loadingChannels.has(m.channelKey));
+    if (nextMsg) {
+      const timer = setTimeout(() => {
+        sendMessage(nextMsg);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [loadingChannels, queuedMessages]);
+  
+  // Create channel
+  // Submit new channel (called from inline input)
+  const submitNewChannel = async () => {
+    const name = newChannelName.trim();
+    if (!name || isCreatingChannel) {
+      if (!name) {
+        setShowNewChannelInput(false);
+        setNewChannelName('');
+      }
+      return;
+    }
+    const key = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    
+    setIsCreatingChannel(true);
+    
+    // Demo mode: add channel locally
+    if (isDemo) {
+      const newChannel: Channel = {
+        id: `demo-channel-${Date.now()}`,
+        key,
+        name: `# ${name}`,
+        messages: []
+      };
+      setChannels(prev => [...prev, newChannel].sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })));
+      setActiveChannelKey(key);
+      setSidebarOpen(false);
+      setShowNewChannelInput(false);
+      setNewChannelName('');
+      setIsCreatingChannel(false);
+      return;
+    }
+    
+    try {
+      await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelName: key, channelTitle: `# ${name}`, userId: userIdRef.current })
+      });
+      await loadChannels();
+      setActiveChannelKey(key);
+      setShowNewChannelInput(false);
+      setNewChannelName('');
+    } catch (e) {
+      console.error('[V3] Failed to create channel:', e);
+    } finally {
+      setIsCreatingChannel(false);
+    }
+  };
+  
+  // Delete channel
+  const deleteChannel = async (channelKey: string) => {
+    if (channelKey === 'general' || isDeletingChannel) return;
+    const confirmText = t('v3.deleteChannel');
+    if (!confirm(confirmText)) return;
+    
+    setIsDeletingChannel(channelKey);
+    
+    // Demo mode: remove channel locally
+    if (isDemo) {
+      setChannels(prev => prev.filter(ch => ch.key !== channelKey));
+      if (activeChannelKey === channelKey) setActiveChannelKey('general');
+      setIsDeletingChannel(null);
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/channels', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelName: channelKey, userId: userIdRef.current })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('[V3] Delete channel API error:', data);
+        setError({ message: `Erreur suppression: ${data.error || res.statusText}` });
+        return;
+      }
+      console.log('[V3] Channel deleted:', channelKey, data);
+      // Clear channel cache BEFORE reloading so stale data doesn't restore the deleted channel
+      clearCachedData('chat_channels', userIdRef.current || undefined);
+      clearCachedData(`chat_messages_${channelKey}`, userIdRef.current || undefined);
+      // Optimistically remove from state immediately (don't call loadChannels - it would re-sync the channel from orphan sessions)
+      setChannels(prev => {
+        const updated = prev.filter(ch => ch.key !== channelKey);
+        setCachedData('chat_channels', updated, userIdRef.current || undefined);
+        return updated;
+      });
+      if (activeChannelKey === channelKey) setActiveChannelKey('general');
+    } catch (e: any) {
+      console.error('[V3] Failed to delete channel:', e);
+      setError({ message: `Erreur suppression: ${e.message}` });
+    } finally {
+      setIsDeletingChannel(null);
+    }
+  };
+  
+  // Open edit modal for a channel
+  const openChannelEdit = (channelKey: string, channelName: string) => {
+    setEditingChannel({ key: channelKey, name: channelName });
+  };
+  
+  // Rename channel (called from modal)
+  const handleRenameChannel = async (channelKey: string, newName: string) => {
+    if (channelKey === 'general') return;
+    try {
+      await fetch('/api/channels', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelName: channelKey, newTitle: `# ${newName}`, userId: userIdRef.current })
+      });
+      await loadChannels();
+    } catch (e) {
+      console.error('[V3] Failed to rename channel:', e);
+    }
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) = send message
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      sendMessage();
+    }
+    // Enter alone = new line (default textarea behavior)
+  };
+  
+  if (!isLoaded || !isInitialized) {
+    return (
+      <div className="h-screen bg-gray-900 flex flex-col">
+        {/* Skeleton Header */}
+        <div className="h-14 bg-gray-800 border-b border-gray-700 flex items-center px-4">
+          <div className="animate-pulse flex items-center gap-4 w-full">
+            <div className="h-6 bg-gray-700 rounded w-24"></div>
+            <div className="flex-1"></div>
+            <div className="h-8 w-8 bg-gray-700 rounded-full"></div>
+          </div>
+        </div>
+        {/* Skeleton Content */}
+        <div className="flex-1 flex">
+          {/* Skeleton Sidebar - hidden on mobile */}
+          <div className="hidden md:block w-64 bg-gray-800 border-r border-gray-700 p-4">
+            <div className="animate-pulse space-y-3">
+              <div className="h-5 bg-gray-700 rounded w-20 mb-4"></div>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-10 bg-gray-700/50 rounded-lg"></div>
+              ))}
+            </div>
+          </div>
+          {/* Skeleton Chat */}
+          <div className="flex-1 flex flex-col p-4">
+            <div className="animate-pulse space-y-4 flex-1">
+              <div className="flex justify-end"><div className="h-12 bg-gray-700 rounded-lg w-48"></div></div>
+              <div className="flex justify-start"><div className="h-20 bg-gray-800 rounded-lg w-64"></div></div>
+              <div className="flex justify-end"><div className="h-10 bg-gray-700 rounded-lg w-32"></div></div>
+              <div className="flex justify-start"><div className="h-16 bg-gray-800 rounded-lg w-56"></div></div>
+            </div>
+            {/* Skeleton Input */}
+            <div className="h-12 bg-gray-800 rounded-lg mt-4 animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Welcome screen if gateway not configured (skip in demo mode)
+  if (!isDemo && isGatewayConfigured === false) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        <Header 
+          version={isScreenshot ? '' : APP_VERSION}
+          onMenuClick={() => {}}
+          onBugReport={() => setBugReportOpen(true)}
+        />
+        
+        <main className="flex-1 flex items-center justify-center p-4 pb-24 md:pb-4">
+          <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 text-center">
+            <img src="/logo.png" alt="Ekybot" className="h-16 w-16 rounded-xl mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-white mb-2">
+              {t('v3.welcomeTitle')}
+            </h1>
+            <p className="text-gray-400 mb-6">
+              {t('v3.welcomeSubtitle')}
+            </p>
+            
+            <div className="space-y-4 text-left">
+              {/* Step 1 — Install OpenClaw */}
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">1</div>
+                <div className="flex-1">
+                  <p className="text-white font-medium mb-1.5">
+                    {t('v3.step1Title')}
+                  </p>
+                  <p className="text-gray-400 text-sm mb-2">
+                    {t('v3.step1Desc')}
+                  </p>
+                  <a
+                    href="/openclaw-install"
+                    className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                  >
+                    📖 {t('v3.step1Link')}
+                  </a>
+                </div>
+              </div>
+
+              {/* Step 2 — Connect */}
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">2</div>
+                <div className="flex-1">
+                  <p className="text-white font-medium mb-1.5">
+                    {t('v3.step2Title')}
+                  </p>
+                  <p className="text-gray-400 text-sm mb-2">
+                    {t('v3.step2Desc')}
+                  </p>
+                  <Link
+                    href="/v3/settings"
+                    className="inline-flex items-center gap-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    ⚙️ {t('v3.step2Link')}
+                  </Link>
+                </div>
+              </div>
+            </div>
+            
+            {/* Demo button */}
+            <div className="mt-6">
+              <Link
+                href="/v3?demo=true"
+                className="w-full inline-flex items-center justify-center gap-2 text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-lg font-medium transition-colors"
+              >
+                👀 {t('v3.seeDemo')}
+              </Link>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-700">
+              <p className="text-sm text-gray-500 mb-3">
+                {t('v3.alreadyConfigured')}
+              </p>
+              <Link
+                href="/scan"
+                className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                📱 {t('v3.scanQr')}
+              </Link>
+            </div>
+          </div>
+        </main>
+        
+        <BugReportModal isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+        <BottomNav />
+      </div>
+    );
+  }
+  
+  return (
+    <div 
+      className={`fixed inset-0 flex flex-col bg-gray-900 overflow-hidden ${isDragging ? 'ring-4 ring-blue-500 ring-inset' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Toast notification (replaces native alert) */}
+      {toast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-lg text-sm font-medium transition-all animate-fade-in ${
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          'bg-blue-600 text-white'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+      {/* Header - fixed at top */}
+      <Header 
+        version={isScreenshot ? '' : APP_VERSION}
+        onMenuClick={() => setSidebarOpen(true)}
+        onBugReport={() => setBugReportOpen(true)}
+        onSearch={() => setShowSearch(prev => !prev)}
+      />
+      {/* Spacer for fixed header */}
+      <div 
+        className="flex-shrink-0"
+        style={{ 
+          height: 'calc(56px + max(12px, env(safe-area-inset-top, 12px)))'
+        }}
+      />
+
+      {isWebDemo && !isScreenshot && <DemoBanner />}
+      {isWebDemo && !isScreenshot && <DemoAuthGate isOpen={demoGate.isOpen} onClose={demoGate.close} action={demoGate.action} />}
+
+      {/* Upgrade banner for free users */}
+      {!isDemo && !isScreenshot && subscription && subscription.plan === 'free' && !isNativeApp && (
+        <div className="px-4 py-2.5 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 border-b border-blue-500/30 flex items-center justify-between">
+          <span className="text-sm text-blue-200">
+            🎁 Plan gratuit — 1 agent. <span className="text-blue-400">Passez à Starter pour 10 agents.</span>
+          </span>
+          <a
+            href="/pricing"
+            className="text-xs bg-blue-500 hover:bg-blue-400 text-white font-medium px-3 py-1 rounded-lg transition-colors"
+          >
+            Voir les plans
+          </a>
+        </div>
+      )}
+
+      {/* Channel budget indicator */}
+      {channelBudget?.budget && (
+        <div className={`px-4 py-2 flex items-center justify-between text-sm ${
+          channelBudget.isOverBudget 
+            ? 'bg-red-600/90' 
+            : channelBudget.used / channelBudget.budget > 0.8 
+              ? 'bg-yellow-600/90' 
+              : 'bg-gray-700/90'
+        }`}>
+          <span className="text-white">
+            💰 Budget: ${channelBudget.used.toFixed(2)} / ${channelBudget.budget.toFixed(2)}
+            {channelBudget.isOverBudget && ' ⚠️ Dépassé!'}
+          </span>
+          <div className="w-24 h-2 bg-gray-600 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full ${
+                channelBudget.isOverBudget ? 'bg-red-400' : 
+                channelBudget.used / channelBudget.budget > 0.8 ? 'bg-yellow-400' : 'bg-green-400'
+              }`}
+              style={{ width: `${Math.min(100, (channelBudget.used / channelBudget.budget) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Push notification banner */}
+      {showPushBanner && !isCapacitor && (
+        <div className="bg-blue-600 px-4 py-2 flex items-center justify-between">
+          <span className="text-white text-sm">🔔 {t('notifications.notificationsBanner')}</span>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                const success = await subscribe();
+                if (success) setShowPushBanner(false);
+              }}
+              className="px-3 py-1 bg-white text-blue-600 text-sm font-medium rounded"
+            >
+              Activer
+            </button>
+            <button
+              onClick={() => setShowPushBanner(false)}
+              className="px-2 py-1 text-white/80 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Demo mode banner - show for URL param demo=true OR Capacitor native app */}
+      {isDemo && (
+        <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-3 flex-shrink-0">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">🎮</span>
+            <div className="flex-1">
+              <p className="text-white font-medium text-sm">
+                {t('v3.demoMode')}
+              </p>
+              <p className="text-white/80 text-xs mt-0.5">
+                {t('v3.demoDesc')}
+              </p>
+            </div>
+            <Link 
+              href="/help"
+              className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-full whitespace-nowrap"
+            >
+              {t('v3.learnMore')}
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden relative pb-20 md:pb-0">
+        {/* Drag overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 bg-blue-500/20 z-50 flex items-center justify-center pointer-events-none">
+            <div className="bg-gray-800 px-8 py-6 rounded-xl shadow-2xl border-2 border-blue-500">
+              <p className="text-xl text-white font-semibold">📷 {t('v3.dropImage')}</p>
+            </div>
+          </div>
+        )}
+        
+        {/* ============ MOBILE MENU MODAL ============ */}
+        {sidebarOpen && (
+          <div className="md:hidden fixed inset-0 z-50">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/70"
+              onClick={() => { setSidebarOpen(false); setShowNewChannelInput(false); setNewChannelName(''); }}
+            />
+            {/* Menu panel - with safe area padding for iOS */}
+            <div 
+              className="absolute bg-gray-800 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+              style={{
+                top: 'max(16px, env(safe-area-inset-top, 16px))',
+                left: '16px',
+                right: '16px',
+                bottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
+              }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-4 border-b border-gray-700">
+                <div className="flex items-center gap-2">
+                  <img src="/logo.png" alt="Ekybot" className="h-8 w-8 rounded-lg" />
+                  {!isScreenshot && <span className="text-xs text-gray-400 bg-gray-700 px-2 py-0.5 rounded">{APP_VERSION}</span>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className="w-10 h-10 flex items-center justify-center text-white text-2xl bg-gray-700 rounded-full active:bg-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {/* Channels */}
+              <div className="flex-1 overflow-y-auto p-3">
+                <p className="text-xs text-gray-500 uppercase mb-2 px-2">{t('channels.title')}</p>
+                {channels.map(channel => (
+                  <button
+                    type="button"
+                    key={channel.key}
+                    onClick={() => { setActiveChannelKey(channel.key); setSidebarOpen(false); }}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg mb-1 text-left active:opacity-70 ${
+                      activeChannelKey === channel.key 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-300 bg-gray-700/50'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <span className="truncate block">{channel.name}</span>
+                      {channel.agentName && (
+                        <span className={`text-xs truncate block ${activeChannelKey === channel.key ? 'text-blue-200' : 'text-gray-500'}`}>
+                          🤖 {channel.agentName}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Unread badge */}
+                      {channel.unreadCount && channel.unreadCount > 0 && activeChannelKey !== channel.key && (
+                        <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                          {channel.unreadCount > 99 ? '99+' : channel.unreadCount}
+                        </span>
+                      )}
+                      {channel.key !== 'general' && (
+                        <span
+                          onClick={(e) => { e.stopPropagation(); deleteChannel(channel.key); }}
+                          className={`p-1 text-xs ${isDeletingChannel === channel.key ? 'animate-spin' : 'text-gray-400'}`}
+                        >
+                          {isDeletingChannel === channel.key ? '⏳' : '🗑️'}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+                {showNewChannelInput ? (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newChannelName}
+                      onChange={(e) => setNewChannelName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitNewChannel();
+                        if (e.key === 'Escape' && !isCreatingChannel) { setShowNewChannelInput(false); setNewChannelName(''); }
+                      }}
+                      disabled={isCreatingChannel}
+                      placeholder={t('v3.channelNamePlaceholder')}
+                      className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={submitNewChannel}
+                      disabled={isCreatingChannel}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm active:bg-blue-700 disabled:opacity-50 min-w-[44px] flex items-center justify-center"
+                    >
+                      {isCreatingChannel ? (
+                        <span className="animate-spin">⏳</span>
+                      ) : '✓'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewChannelInput(false); setNewChannelName(''); }}
+                      disabled={isCreatingChannel}
+                      className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm active:bg-gray-700 disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewChannelInput(true)}
+                    className="w-full px-4 py-3 text-gray-400 bg-gray-700/30 rounded-lg mt-2 active:bg-gray-700 touch-manipulation"
+                  >
+                    {t('channels.newChannel')}
+                  </button>
+                )}
+              </div>
+              
+              {/* Agents Activity - Mobile Multi-Agent */}
+              <div className="mx-3 mb-2 bg-gray-700/50 rounded-lg overflow-hidden">
+                {/* Main Agent */}
+                <a 
+                  href="/agent-activity"
+                  className="p-3 flex items-center justify-between hover:bg-gray-700/70"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg">🦅</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-sm font-medium text-gray-300">{agentName}</span>
+                      {currentTask && (
+                        <span className="text-xs text-yellow-400 truncate">⚡ {currentTask}</span>
+                      )}
+                      {!currentTask && agentStatus !== 'offline' && (
+                        <span className="text-xs text-green-400">✓ Disponible</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    agentStatus === 'working' ? 'bg-yellow-400 animate-pulse' :
+                    agentStatus === 'online' ? 'bg-green-400' : 'bg-gray-500'
+                  }`} />
+                </a>
+                
+                {/* Other Agents - Mobile */}
+                {!isDemo && (
+                  <>
+                    <div className="px-3 py-2 flex items-center justify-between border-t border-gray-600/50">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-lg">🤖</span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-sm font-medium text-gray-300">Eky</span>
+                          <span className="text-xs text-blue-400 truncate">💻 CTO EkyBot</span>
+                        </div>
+                      </div>
+                      <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" />
+                    </div>
+                    
+                    <div className="px-3 py-2 flex items-center justify-between border-t border-gray-600/50">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-lg">⚓</span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-sm font-medium text-gray-300">Marina</span>
+                          <span className="text-xs text-gray-500 truncate">🚢 Stratégie navale</span>
+                        </div>
+                      </div>
+                      <span className="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0" />
+                    </div>
+                    
+                    <div className="px-3 py-2 flex items-center justify-between border-t border-gray-600/50">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-lg">🐕</span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-sm font-medium text-gray-300">Bosco</span>
+                          <span className="text-xs text-gray-500 truncate">🎯 Support tactique</span>
+                        </div>
+                      </div>
+                      <span className="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0" />
+                    </div>
+                    
+                    <div className="px-3 py-2 flex items-center justify-between border-t border-gray-600/50">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-lg">💰</span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-sm font-medium text-gray-300">Invest</span>
+                          <span className="text-xs text-gray-500 truncate">📊 Analyse financière</span>
+                        </div>
+                      </div>
+                      <span className="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0" />
+                    </div>
+                  </>
+                )}
+              </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="p-3 border-t border-gray-700 space-y-2">
+                {/* Push notifications button */}
+                {isSupported && !isSubscribed && (
+                  <button
+                    onClick={async () => {
+                      const success = await subscribe();
+                      if (success) showToast(t('notifications.activated'), 'success');
+                    }}
+                    className="w-full px-4 py-2 text-sm text-white bg-blue-600 rounded-lg"
+                  >
+                    🔔 {t('notifications.enableNotifications')}
+                  </button>
+                )}
+                {isSubscribed && (
+                  <button
+                    onClick={async () => {
+                      if (confirm(t('notifications.disableConfirm'))) {
+                        const success = await unsubscribe();
+                        if (success) showToast(t('notifications.deactivated'), 'success');
+                      }
+                    }}
+                    className="w-full px-4 py-2 text-sm text-green-400 bg-gray-700 rounded-lg text-center cursor-pointer"
+                  >
+                    ✓ {t('notifications.notificationsEnabled')}
+                  </button>
+                )}
+                <button
+                  onClick={() => { setSidebarOpen(false); setShowChannelConfig(true); }}
+                  className="w-full px-4 py-2 text-sm text-blue-400 bg-gray-700 rounded-lg"
+                >
+                  📋 {t('v3.channelInstructions')}
+                </button>
+                <button
+                  onClick={() => { setSidebarOpen(false); setBugReportOpen(true); }}
+                  className="w-full px-4 py-2 text-sm text-red-400 bg-gray-700 rounded-lg"
+                >
+                  🐛 {t('bugReport.title')}
+                </button>
+                <button
+                  disabled={isResetting}
+                  onClick={async () => {
+                    if (!confirm(t('chat.resetConfirm'))) return;
+                    setIsResetting(true);
+                    try {
+                      // Generate context summary before reset
+                      let contextSummary = '';
+                      try {
+                        const sumRes = await fetch('/api/chat/summarize', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ channelName: activeChannelKey })
+                        });
+                        if (sumRes.ok) {
+                          const sumData = await sumRes.json();
+                          contextSummary = sumData.summary || '';
+                        }
+                      } catch (e) {
+                        console.warn('[V3] Summary generation failed, continuing reset:', e);
+                      }
+
+                      const resetContent = contextSummary
+                        ? `🔄 [RESET] Session réinitialisée.\n\n**Contexte pré-reset :**\n${contextSummary}\n\nMerci de reprendre à partir de ce contexte.`
+                        : '🔄 [RESET] La conversation a été réinitialisée. Merci de consulter l\'historique des messages précédents pour le contexte.';
+
+                      await fetch('/api/messages', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          channelName: activeChannelKey,
+                          userId: userIdRef.current,
+                          message: { 
+                            role: 'user', 
+                            content: resetContent,
+                            timestamp: Date.now()
+                          }
+                        })
+                      });
+                      await loadMessages(activeChannelKey, true);
+                      setSidebarOpen(false);
+                      showToast(t('chat.resetDone'), 'success');
+                    } catch (e) {
+                      console.error('[V3] Reset error:', e);
+                      showToast(t('chat.resetError'), 'error');
+                    } finally {
+                      setIsResetting(false);
+                    }
+                  }}
+                  className="w-full px-4 py-2 text-sm text-orange-400 bg-gray-700 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isResetting ? (<><span className="animate-spin">⏳</span> {t('chat.resetting') || 'Reset en cours...'}</>) : t('chat.resetConversation')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============ DESKTOP SIDEBAR ============ */}
+        <aside className="hidden md:flex w-64 bg-gray-800 border-r border-gray-700 flex-shrink-0 flex-col">
+          {/* Desktop channels header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase">Channels</h2>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-2">
+            {channels.map(channel => (
+              <div
+                key={channel.key}
+                className={`group flex items-center justify-between px-3 py-2 rounded cursor-pointer ${
+                  activeChannelKey === channel.key 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700'
+                }`}
+                onClick={() => { setActiveChannelKey(channel.key); setSidebarOpen(false); }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate">{channel.name}</span>
+                    {/* Unread badge */}
+                    {channel.unreadCount && channel.unreadCount > 0 && activeChannelKey !== channel.key && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center flex-shrink-0">
+                        {channel.unreadCount > 99 ? '99+' : channel.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  {channel.agentName && (
+                    <span className={`text-xs truncate block ${activeChannelKey === channel.key ? 'text-blue-200' : 'text-gray-500'}`}>
+                      🤖 {channel.agentName}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openChannelEdit(channel.key, channel.name); }}
+                    className="text-gray-400 hover:text-white"
+                    title={t('common.edit') || 'Modifier'}
+                  >
+                    ✏️
+                  </button>
+                  {channel.key !== 'general' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteChannel(channel.key); }}
+                      className={`${isDeletingChannel === channel.key ? 'animate-spin text-gray-400' : 'text-red-400 hover:text-red-300'}`}
+                      title={t('common.delete')}
+                      disabled={isDeletingChannel === channel.key}
+                    >
+                      {isDeletingChannel === channel.key ? '⏳' : '×'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="p-2 border-t border-gray-700">
+            {showNewChannelInput ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  autoFocus
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitNewChannel();
+                    if (e.key === 'Escape' && !isCreatingChannel) { setShowNewChannelInput(false); setNewChannelName(''); }
+                  }}
+                  disabled={isCreatingChannel}
+                  placeholder={t('v3.channelNamePlaceholder')}
+                  className="flex-1 px-2 py-1.5 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm disabled:opacity-50"
+                />
+                <button
+                  onClick={submitNewChannel}
+                  disabled={isCreatingChannel}
+                  className="px-2 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 min-w-[36px] flex items-center justify-center"
+                >
+                  {isCreatingChannel ? (
+                    <span className="animate-spin">⏳</span>
+                  ) : '✓'}
+                </button>
+                <button
+                  onClick={() => { setShowNewChannelInput(false); setNewChannelName(''); }}
+                  disabled={isCreatingChannel}
+                  className="px-2 py-1.5 bg-gray-600 text-white rounded text-sm hover:bg-gray-500 disabled:opacity-50"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewChannelInput(true)}
+                className="w-full px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+              >
+                {t('channels.newChannel')}
+              </button>
+            )}
+          </div>
+          
+          {/* Agents Activity Widget - Multi-Agent */}
+          <div className="border-t border-gray-700">
+            {/* Main Agent (Odin/Dynamic) */}
+            <a 
+              href="/agent-activity"
+              className="flex items-center justify-between p-3 hover:bg-gray-700 transition-colors"
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-lg">🦅</span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-sm font-medium text-gray-300">{agentName}</span>
+                  {currentTask && (
+                    <span className="text-xs text-yellow-400 truncate">⚡ {currentTask}</span>
+                  )}
+                  {!currentTask && agentStatus === 'offline' && (
+                    <span className="text-xs text-gray-500">💤 {t('agent.sleeping') || 'En veille'}</span>
+                  )}
+                  {!currentTask && agentStatus !== 'offline' && (
+                    <span className="text-xs text-green-400">✓ {t('agent.available') || 'Disponible'}</span>
+                  )}
+                </div>
+              </div>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                agentStatus === 'working' ? 'bg-yellow-400 animate-pulse' :
+                agentStatus === 'online' ? 'bg-green-400' : 'bg-gray-500'
+              }`} title={agentStatus === 'working' ? t('agent.working') : agentStatus === 'online' ? t('agent.online') : t('agent.offline')} />
+            </a>
+            
+            {!isDemo && (
+              <>
+                {/* Eky - CTO EkyBot */}
+                <div className="flex items-center justify-between p-3 hover:bg-gray-700 transition-colors border-t border-gray-700/50">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg">🤖</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-sm font-medium text-gray-300">Eky</span>
+                      <span className="text-xs text-blue-400 truncate">💻 CTO EkyBot - Développement actif</span>
+                    </div>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" title="Développement en cours" />
+                </div>
+                
+                {/* Marina - Stratégie navale */}
+                <div className="flex items-center justify-between p-3 hover:bg-gray-700 transition-colors border-t border-gray-700/50">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg">⚓</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-sm font-medium text-gray-300">Marina</span>
+                      <span className="text-xs text-gray-500 truncate">🚢 Stratégie navale - En standby</span>
+                    </div>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0" title="En attente" />
+                </div>
+                
+                {/* Bosco - Support tactique */}
+                <div className="flex items-center justify-between p-3 hover:bg-gray-700 transition-colors border-t border-gray-700/50">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg">🐕</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-sm font-medium text-gray-300">Bosco</span>
+                      <span className="text-xs text-gray-500 truncate">🎯 Support tactique - En standby</span>
+                    </div>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0" title="En attente" />
+                </div>
+                
+                {/* Invest - Analyse financière */}
+                <div className="flex items-center justify-between p-3 hover:bg-gray-700 transition-colors border-t border-gray-700/50">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg">💰</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-sm font-medium text-gray-300">Invest</span>
+                      <span className="text-xs text-gray-500 truncate">📊 Analyse financière - En standby</span>
+                    </div>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0" title="En attente" />
+                </div>
+              </>
+            )}
+          </div>
+          </div>
+          
+          {/* Push notifications */}
+          <div className="p-3 border-t border-gray-700 relative z-10">
+            {isSupported && !isSubscribed && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  showToast(t('notifications.activating'), 'info');
+                  try {
+                    const result = await subscribe();
+                    if (result.success) {
+                      showToast(t('notifications.activated'), 'success');
+                    } else {
+                      // Show specific error message from the hook
+                      showToast(result.error || t('notifications.checkPermissions'), 'error');
+                    }
+                  } catch (err) {
+                    showToast('Error: ' + err, 'error');
+                  }
+                }}
+                className="w-full px-3 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 cursor-pointer active:bg-blue-800 select-none"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+              >
+                🔔 {t('notifications.enableNotifications')}
+              </button>
+            )}
+            {isSubscribed && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (confirm(t('notifications.disableConfirm'))) {
+                    const success = await unsubscribe();
+                    if (success) showToast(t('notifications.deactivated'), 'success');
+                  }
+                }}
+                className="w-full px-3 py-2 text-sm text-green-400 bg-gray-700 rounded hover:bg-gray-600 cursor-pointer"
+              >
+                ✓ {t('notifications.notificationsEnabled')}
+              </button>
+            )}
+            {!isSupported && (
+              <div className="text-xs text-gray-500 text-center">
+                {t('notifications.notificationsNotSupported')}
+              </div>
+            )}
+          </div>
+          
+          {/* Reset button */}
+          <div className="p-3 border-t border-gray-700">
+            <button
+              disabled={isResetting}
+              onClick={async () => {
+                if (!confirm(t('chat.resetConfirm'))) return;
+                setIsResetting(true);
+                try {
+                  // Generate context summary before reset
+                  let contextSummary = '';
+                  try {
+                    const sumRes = await fetch('/api/chat/summarize', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ channelName: activeChannelKey })
+                    });
+                    if (sumRes.ok) {
+                      const sumData = await sumRes.json();
+                      contextSummary = sumData.summary || '';
+                    }
+                  } catch (e2) {
+                    console.warn('[V3] Summary generation failed, continuing reset:', e2);
+                  }
+
+                  const resetContent2 = contextSummary
+                    ? `🔄 [RESET] Session réinitialisée.\n\n**Contexte pré-reset :**\n${contextSummary}\n\nMerci de reprendre à partir de ce contexte.`
+                    : '🔄 [RESET] La conversation a été réinitialisée. Merci de consulter l\'historique des messages précédents pour le contexte.';
+
+                  await fetch('/api/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      channelName: activeChannelKey,
+                      userId: userIdRef.current,
+                      message: { 
+                        role: 'user', 
+                        content: resetContent2,
+                        timestamp: Date.now()
+                      }
+                    })
+                  });
+                  // Reload messages
+                  await loadMessages(activeChannelKey, true);
+                  showToast(t('chat.resetDone'), 'success');
+                } catch (e) {
+                  console.error('[V3] Reset error:', e);
+                  showToast(t('chat.resetError'), 'error');
+                } finally {
+                  setIsResetting(false);
+                }
+              }}
+              className="w-full px-3 py-2 text-sm text-orange-400 hover:text-orange-300 hover:bg-gray-700 rounded flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isResetting ? (<><span className="animate-spin">⏳</span> {t('chat.resetting') || 'Reset en cours...'}</>) : t('chat.resetConversation')}
+            </button>
+          </div>
+          
+          {/* Version badge */}
+          {!isScreenshot && <div className="p-3 border-t border-gray-700 text-center">
+            <span className="text-xs text-gray-500">{APP_VERSION}</span>
+          </div>}
+        </aside>
+        
+        {/* Main Chat */}
+        <main className="flex-1 flex flex-col overflow-x-hidden pb-20 md:pb-0">
+          {/* Search Bar */}
+          {showSearch && (
+            <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
+              <span className="text-gray-400">🔍</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('chat.searchMessages')}
+                className="flex-1 bg-gray-700 text-white px-3 py-1 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                autoFocus
+              />
+              <button
+                onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          
+          {/* Messages */}
+          <div 
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4"
+          >
+            {/* Channel loading indicator */}
+            {isChangingChannel && (
+              <div className="flex justify-center py-2">
+                <div className="flex items-center gap-2 text-gray-400 text-sm bg-gray-800/50 px-3 py-1 rounded-full">
+                  <span className="animate-spin">⏳</span>
+                  {t('v3.loadingChannel')}
+                </div>
+              </div>
+            )}
+            {/* Load more indicator */}
+            {isLoadingMore && (
+              <div className="flex justify-center py-2">
+                <div className="flex items-center gap-2 text-gray-400 text-sm bg-gray-700/50 px-3 py-1 rounded-full">
+                  <div className="animate-spin h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full"></div>
+                  {t('v3.loadingOlder')}
+                </div>
+              </div>
+            )}
+            {/* Context limit warning */}
+            {activeMessages.length >= 40 && (
+              <div className={`mx-4 mb-2 px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                activeMessages.length >= 48 
+                  ? 'bg-red-900/50 text-red-200 border border-red-700' 
+                  : 'bg-orange-900/40 text-orange-200 border border-orange-700'
+              }`}>
+                <span>{activeMessages.length >= 48 ? '🔴' : '⚠️'}</span>
+                <span>
+                  {activeMessages.length >= 48
+                    ? t('v3.contextAlmostFull').replace('{count}', String(activeMessages.length))
+                    : t('v3.contextApproaching').replace('{count}', String(activeMessages.length))}
+                </span>
+                <button
+                  onClick={async () => {
+                    if (!confirm(t('v3.resetConversation'))) return;
+                    setIsResetting(true);
+                    try {
+                      let ctxSum = '';
+                      try {
+                        const sr = await fetch('/api/chat/summarize', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ channelName: activeChannelKey })
+                        });
+                        if (sr.ok) { const sd = await sr.json(); ctxSum = sd.summary || ''; }
+                      } catch (_e) { /* continue without summary */ }
+
+                      const rc = ctxSum
+                        ? `🔄 [RESET] Session réinitialisée (limite contexte).\n\n**Contexte pré-reset :**\n${ctxSum}\n\nMerci de reprendre à partir de ce contexte.`
+                        : '🔄 [RESET] Conversation réinitialisée (limite contexte). Consulte l\'historique.';
+
+                      await fetch('/api/messages', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          channelName: activeChannelKey,
+                          userId: userIdRef.current,
+                          message: { role: 'user', content: rc, timestamp: Date.now() }
+                        })
+                      });
+                      await loadMessages(activeChannelKey, true);
+                    } catch (e) { console.error('[V3] Reset error:', e); }
+                    finally { setIsResetting(false); }
+                  }}
+                  className="ml-auto px-2 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs whitespace-nowrap"
+                >
+                  🔄 Reset
+                </button>
+              </div>
+            )}
+            {activeMessages
+              .filter(msg => !searchQuery || msg.content?.toLowerCase().includes(searchQuery.toLowerCase()))
+              .map((msg, idx) => {
+                // Determine author type (backwards compatible with role)
+                // Detect agent messages even when role=user (posted via API)
+                const isAgentMessage = msg.authorType === 'main-agent' || msg.authorType === 'sub-agent' 
+                  || (msg.authorName && msg.authorName !== 'Michael' && msg.role === 'user')
+                  || (msg.role === 'user' && msg.content?.startsWith('📨 ['));
+                const authorType = isAgentMessage 
+                  ? (msg.authorType || 'sub-agent')
+                  : (msg.authorType || (msg.role === 'user' ? 'human' : 'sub-agent'));
+                const isHuman = authorType === 'human' && !isAgentMessage;
+                const isMainAgent = authorType === 'main-agent';
+                
+                // Check if this is a CC message from @mentions
+                const isCCMessage = !isHuman && msg.content?.startsWith('[CC depuis #');
+                
+                // Check if this is an inter-agent message
+                const isInterAgentMessage = !isHuman && msg.content?.startsWith('📨 [');
+                
+                // Check if this is a system error message
+                const isSystemError = msg.authorType === 'system' && msg.content?.startsWith('❌');
+                const isSystemWarning = msg.authorType === 'system' && msg.content?.startsWith('⏳');
+                const isSystemMessage = msg.authorType === 'system';
+                
+                // Colors based on author type
+                const bubbleColor = isSystemError
+                  ? 'bg-red-900/40 text-red-200 border-l-4 border-red-500' // Error message style
+                  : isSystemWarning
+                    ? 'bg-yellow-900/40 text-yellow-200 border-l-4 border-yellow-500' // Warning message style
+                  : isCCMessage
+                  ? 'bg-purple-900/30 text-purple-100 border-l-4 border-purple-500' // CC message style
+                  : isInterAgentMessage
+                    ? 'bg-blue-900/50 text-blue-100 border-l-4 border-blue-500' // Inter-agent message style
+                    : isHuman 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-100'; // All agent messages: same gray
+                
+                return (
+              <div
+                key={msg.id || idx}
+                className={`flex ${isHuman ? 'justify-end' : 'justify-start'} group transition-opacity duration-300`}
+                style={{ opacity: 1 }}
+              >
+                <div className={`flex items-end gap-2 ${isHuman ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {/* Avatar for agents */}
+                  {!isHuman && (
+                    <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm bg-gray-600`}>
+                      {isMainAgent ? '🦅' : '🤖'}
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-0.5 max-w-[75%] sm:max-w-[75%]">
+                    {/* Author name for agents - more visible for sub-agents */}
+                    {!isHuman && msg.authorName && (
+                      <div className={`text-sm font-semibold flex items-center gap-1 text-blue-400`}>
+                        <span>{msg.authorName}</span>
+                        {!isMainAgent && msg.authorType === 'sub-agent' && (
+                          <span className="text-xs bg-purple-600/30 px-1.5 py-0.5 rounded text-purple-300">@mention</span>
+                        )}
+                        {!isMainAgent && msg.authorType !== 'sub-agent' && (
+                          <span className="text-xs bg-blue-600/30 px-1.5 py-0.5 rounded text-blue-300">invité</span>
+                        )}
+                      </div>
+                    )}
+                    {/* CC message indicator */}
+                    {isCCMessage && (
+                      <span className="text-xs font-medium text-purple-400">
+                        📋 Message transféré
+                      </span>
+                    )}
+                  <div
+                    className={`px-3 py-2 rounded-lg overflow-hidden break-words ${bubbleColor}`}
+                    style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                  >
+                    {/* Reply citation block */}
+                    {msg.replyTo && (
+                      <div 
+                        className={`text-xs mb-2 p-2 rounded border-l-2 ${
+                          isHuman 
+                            ? 'bg-blue-700/50 border-blue-400' 
+                            : isMainAgent
+                              ? 'bg-amber-700/50 border-amber-400'
+                              : 'bg-gray-600/50 border-gray-400'
+                        }`}
+                      >
+                        <span className="opacity-70">↩️ {msg.replyTo.role === 'assistant' ? agentName : t('common.you')}</span>
+                        <p className="truncate opacity-80">{msg.replyTo.content}</p>
+                      </div>
+                    )}
+                    {/* Linked Task indicator */}
+                    {msg.linkedTask && (
+                      <div className="text-xs mb-2 px-2 py-1 rounded bg-purple-600/30 border border-purple-500/50 flex items-center gap-1">
+                        <span>📌</span>
+                        <span className="opacity-80">Lié à :</span>
+                        <span className="font-medium truncate">{msg.linkedTask.title}</span>
+                      </div>
+                    )}
+                    {/* Images & Videos */}
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {msg.images.map((img, imgIdx) => {
+                          const isVideo = /\.(mp4|webm|mov|m4v|mpeg)$/i.test(img) || img.includes('video');
+                          return isVideo ? (
+                            <video
+                              key={imgIdx}
+                              src={img}
+                              controls
+                              className="max-w-[300px] max-h-[300px] rounded cursor-pointer"
+                              onClick={() => window.open(img, '_blank')}
+                            />
+                          ) : (
+                            <img
+                              key={imgIdx}
+                              src={img}
+                              alt={`Image ${imgIdx + 1}`}
+                              className="max-w-[200px] max-h-[200px] rounded object-cover cursor-pointer"
+                              onClick={() => window.open(img, '_blank')}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Audio */}
+                    {msg.audio && (
+                      <div className="mb-2">
+                        <audio 
+                          src={msg.audio} 
+                          controls 
+                          className="max-w-full h-10"
+                          style={{ minWidth: '200px' }}
+                        />
+                      </div>
+                    )}
+                    <MessageContent 
+                      content={msg.content || '...'} 
+                      className="whitespace-pre-wrap break-words text-lg md:text-base"
+                      style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                    />
+                    {/* Timestamp + delivery status for user messages */}
+                    {msg.timestamp && (
+                      <div className={`text-xs mt-1 flex items-center gap-1 ${isHuman ? 'text-blue-300/60 justify-end' : isMainAgent ? 'text-amber-300/60' : 'text-gray-400/60'}`}>
+                        {formatTime(msg.timestamp)}
+                        {isHuman && (
+                          <span className={`transition-opacity duration-500 ${msg.id.startsWith('temp-') ? 'opacity-60' : 'opacity-100'}`}>
+                            {msg.id.startsWith('temp-') ? '◌' : '✓'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Reactions display */}
+                    {msg.reactions && msg.reactions.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {msg.reactions.map((emoji, idx) => (
+                          <span 
+                            key={idx}
+                            onClick={() => addReaction(msg.id, emoji)}
+                            className="px-2 py-0.5 bg-gray-700/70 rounded-full text-sm cursor-pointer hover:bg-gray-600 active:scale-95 transition-all"
+                          >
+                            {emoji}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Action buttons - reply & react */}
+                  <div className="flex flex-col gap-1 flex-shrink-0 relative">
+                    <button
+                      onClick={() => setReplyToMessage(msg)}
+                      className="w-7 h-7 flex items-center justify-center text-base bg-gray-600 hover:bg-gray-500 active:bg-gray-400 rounded-full transition-colors shadow-sm"
+                      title={t('chat.reply')}
+                    >
+                      ↩️
+                    </button>
+                    <button
+                      onClick={() => setReactionPickerMessageId(reactionPickerMessageId === msg.id ? null : msg.id)}
+                      className="w-7 h-7 flex items-center justify-center text-base bg-gray-600 hover:bg-gray-500 active:bg-gray-400 rounded-full transition-colors shadow-sm"
+                      title="Réagir"
+                    >
+                      😀
+                    </button>
+                    {/* Reaction picker popup */}
+                    {reactionPickerMessageId === msg.id && (
+                      <div className="absolute right-10 top-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-xl z-50 flex gap-1">
+                        {['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '✅'].map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => addReaction(msg.id, emoji)}
+                            className="w-9 h-9 flex items-center justify-center text-xl hover:bg-gray-700 rounded-lg active:scale-110 transition-transform"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  </div>
+                </div>
+              </div>
+            );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+          
+          {/* Scroll to bottom button */}
+          {showScrollButton && (
+            <button
+              onClick={() => { scrollToBottom(true); setHasNewAgentReply(false); }}
+              className={`absolute bottom-32 right-6 z-10 ${hasNewAgentReply ? 'bg-blue-600 hover:bg-blue-500 animate-bounce' : 'bg-gray-700 hover:bg-gray-600'} text-white rounded-full shadow-lg border border-gray-600 transition-all flex items-center gap-2 ${hasNewAgentReply ? 'px-4 py-2' : 'w-10 h-10 justify-center'}`}
+              title="Aller en bas"
+            >
+              {hasNewAgentReply ? (
+                <span className="text-sm font-medium">💬 Nouveau message ↓</span>
+              ) : '↓'}
+            </button>
+          )}
+          
+          {/* Error */}
+          {error && (
+            <div className={`px-4 py-3 border-t ${error.messageSent ? 'bg-yellow-900/30 border-yellow-700/50' : 'bg-red-900/50 border-red-700/50'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={error.messageSent ? 'text-yellow-400' : 'text-red-400'}>{error.messageSent ? '⏳' : '⚠️'}</span>
+                  <div>
+                    <span className={`text-sm ${error.messageSent ? 'text-yellow-300' : 'text-red-300'}`}>{error.message}</span>
+                    {error.messageSent && (
+                      <span className="text-green-400 text-xs ml-2">✓ Message sauvegardé, il sera délivré dès que possible</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {error.messageSent && (
+                    <button
+                      onClick={() => {
+                        setError(null);
+                        // Soft refresh: reload messages from DB without losing page state
+                        if (activeChannelKey) {
+                          loadMessages(activeChannelKey, true);
+                        }
+                      }}
+                      className="text-blue-400 hover:text-blue-300 text-sm px-3 py-1 bg-blue-900/30 hover:bg-blue-900/50 rounded transition-colors"
+                    >
+                      🔄 Actualiser
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setError(null)}
+                    className={`${error.messageSent ? 'text-yellow-400 hover:text-yellow-300' : 'text-red-400 hover:text-red-300'} text-sm px-2`}
+                    title="Fermer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Queued Messages (per-channel) */}
+          {queuedMessages.filter(m => m.channelKey === activeChannelKey).length > 0 && (
+            <div className="px-4 py-2 bg-yellow-900/30 border-t border-yellow-700/50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-yellow-400 font-medium">
+                  ⏳ {t('chat.queuedMessages')} ({queuedMessages.filter(m => m.channelKey === activeChannelKey).length}/2)
+                </span>
+              </div>
+              <div className="space-y-2">
+                {queuedMessages.filter(m => m.channelKey === activeChannelKey).map((msg, idx) => (
+                  <div key={msg.id} className="flex items-start gap-2 bg-yellow-900/20 rounded p-2">
+                    <span className="text-xs text-yellow-500 mt-1">#{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-yellow-200 truncate">{msg.content || '(images)'}</p>
+                      {msg.images && msg.images.length > 0 && (
+                        <span className="text-xs text-yellow-400">📷 {msg.images.length} image(s)</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeFromQueue(msg.id)}
+                      className="text-yellow-400 hover:text-red-400 text-sm"
+                      title="Supprimer de la queue"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Pending Images Preview */}
+          {pendingImages.length > 0 && (
+            <div className="px-4 py-2 bg-gray-800 border-t border-gray-700">
+              <div className="flex flex-wrap gap-2 items-center">
+                {pendingImages.map((img, idx) => (
+                  <div key={idx} className="relative">
+                    {(img.startsWith('data:video/') || ((window as any).__pendingVideoFiles?.[img])) ? (
+                      <video src={img} className="w-16 h-16 object-cover rounded" muted />
+                    ) : (
+                      <img src={img} alt={`Pending ${idx}`} className="w-16 h-16 object-cover rounded" />
+                    )}
+                    {pendingOcrTexts[idx] && (
+                      <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-green-500 text-white rounded-full text-xs flex items-center justify-center" title="Texte extrait (OCR)">
+                        ✓
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removePendingImage(idx)}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {isOcrProcessing && (
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                    OCR...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Pending Files Preview */}
+          {pendingFiles.length > 0 && (
+            <div className="px-4 py-2 bg-gray-800 border-t border-gray-700">
+              <div className="flex flex-wrap gap-2">
+                {pendingFiles.map((file, idx) => (
+                  <div key={idx} className="relative flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg">
+                    <span className="text-lg">📄</span>
+                    <span className="text-sm text-gray-300 max-w-32 truncate">{file.name}</span>
+                    <button
+                      onClick={() => removePendingFile(idx)}
+                      className="w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Recording indicator */}
+          {isRecording && (
+            <div className="px-4 py-2 bg-red-900/50 border-t border-red-700/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                <span className="text-red-300 text-sm">Enregistrement... {recordingDuration}s</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={stopRecording}
+                  className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                >
+                  ✓ Terminer
+                </button>
+                <button
+                  onClick={cancelRecording}
+                  className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                >
+                  ✕ Annuler
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Pending Audio Preview */}
+          {pendingAudio && !isRecording && (
+            <div className="px-4 py-2 bg-gray-800 border-t border-gray-700">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-400">🎤</span>
+                <audio src={pendingAudio.url} controls className="h-8 flex-1" style={{ maxWidth: '200px' }} />
+                <button
+                  onClick={removePendingAudio}
+                  className="px-2 py-1 text-red-400 hover:text-red-300 text-sm"
+                >
+                  ✕ Supprimer
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Reply preview */}
+          {replyToMessage && (
+            <div className="px-4 py-2 bg-gray-800 border-t border-gray-700">
+              <div className="flex items-start gap-2 bg-gray-700/50 rounded-lg p-2 border-l-4 border-green-500">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-green-400 font-medium mb-1">
+                    ↩️ En réponse à {replyToMessage.role === 'assistant' ? agentName : 'vous'} :
+                  </p>
+                  <p className="text-sm text-gray-300 truncate">{replyToMessage.content}</p>
+                </div>
+                <button
+                  onClick={() => setReplyToMessage(null)}
+                  className="text-gray-400 hover:text-red-400 p-1"
+                  title="Annuler la réponse"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Pre-linked task indicator */}
+          {preLinkedTask && (
+            <div className="px-4 py-2 bg-gray-800 border-t border-gray-700">
+              <div className="flex items-center gap-2 bg-blue-900/30 rounded-lg p-2 border-l-4 border-blue-500">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-blue-400 font-medium">
+                    📌 Sera lié à la tâche :
+                  </p>
+                  <p className="text-sm text-gray-300 truncate">{preLinkedTask.title}</p>
+                </div>
+                <button
+                  onClick={() => setPreLinkedTask(null)}
+                  className="text-gray-400 hover:text-red-400 p-1"
+                  title="Annuler la liaison"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Input - mb-20 on mobile to clear BottomNav + safe-area */}
+          <div className="p-4 border-t border-gray-700 mb-20 md:mb-0">
+            <div className="flex gap-2 w-full">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="image/*,video/*,.txt,.md,.json,.log,.rb,.py,.js,.ts,.jsx,.tsx,.html,.css,.xml,.yaml,.yml,.csv,.pdf"
+                multiple
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0 w-8 h-8 flex items-center justify-center bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 text-sm"
+                title="Ajouter une image"
+                disabled={isRecording}
+              >
+                📎
+              </button>
+              {/* Microphone button */}
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-sm ${
+                  isRecording 
+                    ? 'bg-red-600 text-white animate-pulse' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title={isRecording ? 'Stop' : 'Vocal'}
+                disabled={!!pendingAudio}
+              >
+                🎤
+              </button>
+              {/* Link to task button (pre-link before sending) */}
+              <button
+                onClick={() => {
+                  loadRoadmapTasks();
+                  setShowPreLinkModal(true);
+                }}
+                className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-sm ${
+                  preLinkedTask 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title={preLinkedTask ? `Lié à: ${preLinkedTask.title}` : 'Lier à une tâche'}
+                disabled={isRecording}
+              >
+                📌
+              </button>
+              {/* Emoji picker */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 text-sm"
+                  title="Emoji"
+                  disabled={isRecording}
+                >
+                  😀
+                </button>
+                {showEmojiPicker && (
+                  <div 
+                    className="absolute bottom-12 right-0 bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-xl z-[100]"
+                    style={{ minWidth: '280px' }}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-gray-400">{t('chat.selectTask')}</span>
+                      <button 
+                        onClick={() => setShowEmojiPicker(false)}
+                        className="text-gray-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-8 gap-2">
+                      {['😀', '😂', '🥹', '❤️', '🔥', '👍', '👎', '🎉', '🚀', '💡', '✅', '❌', '⚠️', '🐛', '💪', '🙏', '👀', '🤔', '😅', '🫡', '💯', '⭐', '🎯', '📸'].map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => {
+                            setInput(prev => prev + emoji);
+                            setShowEmojiPicker(false);
+                            inputRef.current?.focus();
+                          }}
+                          className="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded text-2xl active:scale-110 transition-transform"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <MentionAutocomplete
+                value={input}
+                onChange={(newValue) => {
+                  // Auto-convert smileys to emojis
+                  const smileyMap: Record<string, string> = {
+                    ':)': '😊', ':-)': '😊', '(:': '😊',
+                    ';)': '😉', ';-)': '😉',
+                    ':D': '😃', ':-D': '😃',
+                    'xD': '😆', 'XD': '😆',
+                    ':(': '😢', ':-(': '😢',
+                    ":'(": '😭', ":'-(": '😭',
+                    ':p': '😛', ':P': '😛', ':-p': '😛', ':-P': '😛',
+                    ':o': '😮', ':O': '😮', ':-o': '😮', ':-O': '😮',
+                    '<3': '❤️',
+                    ':*': '😘', ':-*': '😘',
+                    'B)': '😎', 'B-)': '😎',
+                    ':/': '😕', ':-/': '😕',
+                    ':s': '😖', ':S': '😖',
+                    '^_^': '😊', '^-^': '😊',
+                    '-_-': '😑',
+                    'o_o': '😳', 'O_O': '😳',
+                    '>:(': '😠', '>:-(': '😠',
+                    ':fire:': '🔥', ':heart:': '❤️', ':+1:': '👍', ':-1:': '👎',
+                    ':ok:': '👍', ':rocket:': '🚀', ':star:': '⭐',
+                  };
+                  for (const [smiley, emoji] of Object.entries(smileyMap)) {
+                    if (newValue.endsWith(smiley)) {
+                      newValue = newValue.slice(0, -smiley.length) + emoji;
+                      break;
+                    }
+                  }
+                  setInput(newValue);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={isLoading ? `🦅 ${t('chat.thinking')}` : t('chat.placeholder')}
+                className="flex-1 bg-gray-800 text-white rounded-lg px-4 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto text-base"
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={(!input.trim() && pendingImages.length === 0 && !pendingAudio) || isRecording}
+                className={`shrink-0 w-8 h-8 flex items-center justify-center text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
+                  isLoading 
+                    ? 'bg-yellow-600 hover:bg-yellow-700' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+                title={isLoading ? 'Queue' : 'Envoyer'}
+              >
+                {isLoading ? '⏳' : '→'}
+              </button>
+              
+              {/* Stop button - visible when loading */}
+              {isLoading && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/chat/stop', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ 
+                          agentId: activeChannel?.agentId || 'default',
+                          clearQueueToo: true 
+                        })
+                      });
+                      setLoadingChannels(prev => { const s = new Set(prev); s.delete(activeChannelKey); return s; });
+                      setQueuedMessages(prev => prev.filter(m => m.channelKey !== activeChannelKey));
+                    } catch (e) {
+                      console.error('[Stop] Failed:', e);
+                    }
+                  }}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
+                  title="Arrêter"
+                >
+                  ⏹
+                </button>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
+      
+      {/* Bottom Navigation - Mobile only */}
+      <BottomNav />
+
+      {/* Bug Report Modal */}
+      <BugReportModal isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+      
+      {/* Channel Config Modal - for both config button and edit button */}
+      <ChannelConfigModal
+        isOpen={showChannelConfig || !!editingChannel}
+        onClose={() => { setShowChannelConfig(false); setEditingChannel(null); }}
+        channelKey={editingChannel?.key || activeChannelKey}
+        channelName={editingChannel?.name || activeChannel?.name || `# ${activeChannelKey}`}
+        onSendInstructions={(message, targetChannelKey) => {
+          // Switch to the target channel if different from current, then send
+          const targetKey = targetChannelKey || activeChannelKey;
+          
+          if (targetKey !== activeChannelKey) {
+            // Need to switch channel first, then send
+            setActiveChannelKey(targetKey);
+            // Wait a bit for state to update, then send
+            setTimeout(() => {
+              const instructionMsg: QueuedMessage = {
+                id: `instructions-${Date.now()}`,
+                channelKey: targetKey,
+                content: message,
+              };
+              sendMessage(instructionMsg);
+            }, 100);
+          } else {
+            // Already on correct channel, send directly
+            const instructionMsg: QueuedMessage = {
+              id: `instructions-${Date.now()}`,
+              channelKey: activeChannelKey,
+              content: message,
+            };
+            sendMessage(instructionMsg);
+          }
+        }}
+        onRename={handleRenameChannel}
+        onConfigChange={loadChannels}
+        userId={user?.id}
+      />
+      
+      {/* Link to Task Modal */}
+      {linkToTaskModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setLinkToTaskModal({ open: false, message: null })}
+          />
+          <div className="relative bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">📌 Lier à une tâche</h3>
+              <button
+                onClick={() => setLinkToTaskModal({ open: false, message: null })}
+                className="text-gray-400 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Message preview */}
+            <div className="bg-gray-700/50 rounded p-3 mb-4">
+              <p className="text-xs text-gray-400 mb-1">Message à lier :</p>
+              <p className="text-sm text-gray-200 line-clamp-3">{linkToTaskModal.message?.content}</p>
+            </div>
+            
+            {/* Task list */}
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {roadmapTasks.length === 0 ? (
+                <p className="text-gray-400 text-center py-4">Aucune tâche active</p>
+              ) : (
+                roadmapTasks.map(task => (
+                  <button
+                    key={task.id}
+                    onClick={() => linkMessageToTask(task.id)}
+                    className="w-full text-left px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        task.status === 'in_progress' ? 'bg-yellow-600' :
+                        task.status === 'testing' ? 'bg-blue-600' :
+                        'bg-gray-600'
+                      }`}>
+                        {task.status === 'in_progress' ? 'En cours' :
+                         task.status === 'testing' ? 'À tester' :
+                         'À faire'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-200 mt-1 truncate">{task.title}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Link to Task Modal (before sending) */}
+      {showPreLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setShowPreLinkModal(false)}
+          />
+          <div className="relative bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">📌 Lier le prochain message</h3>
+              <button
+                onClick={() => setShowPreLinkModal(false)}
+                className="text-gray-400 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-400 mb-4">
+              Sélectionne une tâche. Ton prochain message sera automatiquement lié comme commentaire.
+            </p>
+            
+            {/* Task list */}
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {roadmapTasks.length === 0 ? (
+                <p className="text-gray-400 text-center py-4">Aucune tâche active</p>
+              ) : (
+                roadmapTasks.map(task => (
+                  <button
+                    key={task.id}
+                    onClick={() => {
+                      setPreLinkedTask({ id: task.id, title: task.title });
+                      setShowPreLinkModal(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                      preLinkedTask?.id === task.id 
+                        ? 'bg-blue-600 hover:bg-blue-700' 
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        task.status === 'in_progress' ? 'bg-yellow-600' :
+                        task.status === 'testing' ? 'bg-blue-600' :
+                        task.status === 'pipeline' ? 'bg-purple-600' :
+                        'bg-gray-600'
+                      }`}>
+                        {task.status === 'in_progress' ? 'En cours' :
+                         task.status === 'testing' ? 'À tester' :
+                         task.status === 'pipeline' ? 'Pipeline' :
+                         'À faire'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-200 mt-1 truncate">{task.title}</p>
+                  </button>
+                ))
+              )}
+            </div>
+            
+            {/* Clear selection button */}
+            {preLinkedTask && (
+              <button
+                onClick={() => {
+                  setPreLinkedTask(null);
+                  setShowPreLinkModal(false);
+                }}
+                className="mt-4 w-full py-2 text-red-400 hover:text-red-300 text-sm"
+              >
+                ✕ Annuler la liaison
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Wrapper with Suspense for useSearchParams (required in Next.js 14+)
+export default function ChatV3() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white">Chargement...</div>
+      </div>
+    }>
+      <ChatV3Content />
+    </Suspense>
+  );
+}

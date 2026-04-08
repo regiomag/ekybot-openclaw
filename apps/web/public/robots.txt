@@ -1,0 +1,39 @@
+# Ekybot - robots.txt
+# Allow all AI assistants and search engine crawlers
+
+User-agent: *
+Allow: /
+
+# Exclude private/dynamic pages
+Disallow: /api/
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /settings
+Disallow: /v3/settings
+Disallow: /link
+Disallow: /scan
+
+# Sitemap
+Sitemap: https://ekybot.com/sitemap.xml
+
+# Allow AI assistants specifically
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
