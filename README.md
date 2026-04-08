@@ -1,6 +1,12 @@
-# 🤖 EkyBot — Open Source Multi-Agent AI Dashboard
+<p align="center">
+  <img src="docs/screenshots/logo.png" width="280" alt="EkyBot" />
+</p>
 
-EkyBot is an open-source platform for managing AI agents with real-time messaging, inter-agent communication, cost controls, and session management. Built to work with [OpenClaw](https://openclaw.ai) and extensible to other agent runtimes.
+<h1 align="center">EkyBot — Open Source Multi-Agent AI Dashboard</h1>
+
+<p align="center">
+  An open-source platform for managing AI agents with real-time messaging, inter-agent communication, cost controls, and session management. Built to work with <a href="https://openclaw.ai">OpenClaw</a> and extensible to other agent runtimes.
+</p>
 
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
