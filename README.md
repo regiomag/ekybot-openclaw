@@ -7,6 +7,20 @@ EkyBot is an open-source platform for managing AI agents with real-time messagin
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green?logo=supabase)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-purple)
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/chat.png" width="280" alt="Chat with AI agents" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/agents.png" width="280" alt="Agent management" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/costs.png" width="280" alt="Cost tracking" />
+</p>
+
+<p align="center">
+  <em>Chat with agents via @mentions • Manage your AI team • Track API costs in real-time</em>
+</p>
+
 ## ✨ Features
 
 - **🧠 Multi-Agent Orchestration** — Manage multiple AI agents from a single dashboard
