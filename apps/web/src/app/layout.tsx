@@ -9,7 +9,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Ekybot - AI Assistant Platform',
-  description: 'Ton conseiller personnel IA - L\'IA personnelle, enfin compréhensible, contrôlable et responsable.',
+  description: 'Your personal AI assistant platform — personal AI that is finally understandable, controllable, and responsible.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -33,7 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="fr">
+      <html lang="en">
         <head>
           <link rel="icon" href="/icon.svg" type="image/svg+xml" />
           <link rel="icon" href="/favicon.ico" sizes="32x32" />

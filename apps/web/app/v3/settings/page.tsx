@@ -462,8 +462,8 @@ export default function V3SettingsPage() {
     setSaveMessage(
       options?.successMessage ||
         (nextCodexEnabled && !(nextCodexAgentId || codexAgentConfigured)
-          ? '✓ Paramètres sauvegardés. Choisis un agent Codex pour activer les channels.'
-          : '✓ Paramètres sauvegardés')
+          ? (locale === 'en' ? '✓ Settings saved. Choose a Codex agent to enable channels.' : locale === 'de' ? '✓ Einstellungen gespeichert. Wähle einen Codex-Agenten, um Channels zu aktivieren.' : '✓ Paramètres sauvegardés. Choisis un agent Codex pour activer les channels.')
+          : (locale === 'en' ? '✓ Settings saved' : locale === 'de' ? '✓ Einstellungen gespeichert' : '✓ Paramètres sauvegardés'))
     );
     setTimeout(() => setSaveMessage(null), 3000);
   };
@@ -774,14 +774,14 @@ export default function V3SettingsPage() {
       
       if (chatRes.ok) {
         setFirstInstructionsSent(true);
-        setSaveMessage('✓ Instructions envoyées à l\'agent !');
+        setSaveMessage(locale === 'en' ? '✓ Instructions sent to the agent!' : locale === 'de' ? '✓ Anweisungen an den Agenten gesendet!' : '✓ Instructions envoyées à l\'agent !');
         setTimeout(() => setSaveMessage(null), 3000);
       } else {
         throw new Error('Failed to send to agent');
       }
     } catch (error) {
       console.error('Failed to send instructions:', error);
-      setSaveMessage('❌ Erreur d\'envoi. Vérifie la connexion gateway.');
+      setSaveMessage(locale === 'en' ? '❌ Send failed. Check the gateway connection.' : locale === 'de' ? '❌ Senden fehlgeschlagen. Prüfe die Gateway-Verbindung.' : '❌ Erreur d\'envoi. Vérifie la connexion gateway.');
     } finally {
       setIsSendingInstructions(false);
     }
@@ -821,8 +821,8 @@ export default function V3SettingsPage() {
         { codexEnabled: nextValue },
         {
           successMessage: nextValue
-            ? '✓ Codex activé'
-            : '✓ Codex désactivé',
+            ? (locale === 'en' ? '✓ Codex enabled' : locale === 'de' ? '✓ Codex aktiviert' : '✓ Codex activé')
+            : (locale === 'en' ? '✓ Codex disabled' : locale === 'de' ? '✓ Codex deaktiviert' : '✓ Codex désactivé'),
         }
       );
     } catch (error) {
@@ -842,8 +842,8 @@ export default function V3SettingsPage() {
         { codexAgentId: nextAgentId },
         {
           successMessage: nextAgentId
-            ? '✓ Agent Codex mis à jour'
-            : '✓ Agent Codex retiré',
+            ? (locale === 'en' ? '✓ Codex agent updated' : locale === 'de' ? '✓ Codex-Agent aktualisiert' : '✓ Agent Codex mis à jour')
+            : (locale === 'en' ? '✓ Codex agent removed' : locale === 'de' ? '✓ Codex-Agent entfernt' : '✓ Agent Codex retiré'),
         }
       );
     } catch (error) {
@@ -902,7 +902,7 @@ export default function V3SettingsPage() {
         const data = await res.json();
         setAddons(prev => ({ ...prev, agents: prev.agents + 1 }));
         setSubscription(prev => prev ? { ...prev, agentLimit: (data.totals?.agents || prev.agentLimit + 1) } : null);
-        setSaveMessage('✓ Agent ajouté ! +2 CHF/mois');
+        setSaveMessage(locale === 'en' ? '✓ Agent added! +2 CHF/month' : locale === 'de' ? '✓ Agent hinzugefügt! +2 CHF/Monat' : '✓ Agent ajouté ! +2 CHF/mois');
         setTimeout(() => setSaveMessage(null), 3000);
       } else {
         const error = await res.json();
@@ -934,7 +934,7 @@ export default function V3SettingsPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Chargement...</div>
+        <div className="text-white">{t('common.loading')}</div>
       </div>
     );
   }
@@ -956,7 +956,7 @@ export default function V3SettingsPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link href="/v3" className="text-gray-400 hover:text-white">←</Link>
-            <h1 className="text-xl font-bold text-white">⚙️ Paramètres</h1>
+            <h1 className="text-xl font-bold text-white">⚙️ {t('settings.title')}</h1>
           </div>
           <div className="flex items-center gap-2">
             {saveMessage && (
@@ -1126,37 +1126,37 @@ export default function V3SettingsPage() {
         </section>
 
         <section className="bg-gray-800 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-white mb-2">🔄 Synchronisation multi-appareils</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">{locale === 'en' ? '🔄 Multi-device sync' : locale === 'de' ? '🔄 Geräteübergreifende Synchronisierung' : '🔄 Synchronisation multi-appareils'}</h2>
           <p className="text-gray-400 mb-6">
-            Synchronise tes conversations entre tous tes appareils.
+            {locale === 'en' ? 'Sync your conversations across all your devices.' : locale === 'de' ? 'Synchronisiere deine Gespräche auf all deinen Geräten.' : 'Synchronise tes conversations entre tous tes appareils.'}
           </p>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="bg-gray-700/50 rounded-lg p-5 border border-gray-600">
               <div className="text-3xl mb-3">📤</div>
-              <h3 className="font-semibold text-lg mb-2 text-white">Partager ma config</h3>
+              <h3 className="font-semibold text-lg mb-2 text-white">{locale === 'en' ? 'Share my config' : locale === 'de' ? 'Meine Konfiguration teilen' : 'Partager ma config'}</h3>
               <p className="text-sm text-gray-400 mb-4">
-                Génère un QR code pour synchroniser un autre appareil.
+                {locale === 'en' ? 'Generate a QR code to sync another device.' : locale === 'de' ? 'Erzeuge einen QR-Code, um ein anderes Gerät zu synchronisieren.' : 'Génère un QR code pour synchroniser un autre appareil.'}
               </p>
               <Link
                 href="/link"
                 className="inline-block w-full text-center px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
               >
-                📲 Afficher le QR code
+                {locale === 'en' ? '📲 Show QR code' : locale === 'de' ? '📲 QR-Code anzeigen' : '📲 Afficher le QR code'}
               </Link>
             </div>
 
             <div className="bg-gray-700/50 rounded-lg p-5 border border-gray-600">
               <div className="text-3xl mb-3">📱</div>
-              <h3 className="font-semibold text-lg mb-2 text-white">Recevoir une config</h3>
+              <h3 className="font-semibold text-lg mb-2 text-white">{locale === 'en' ? 'Receive a config' : locale === 'de' ? 'Konfiguration empfangen' : 'Recevoir une config'}</h3>
               <p className="text-sm text-gray-400 mb-4">
-                Scanne le QR code affiché sur ton autre appareil.
+                {locale === 'en' ? 'Scan the QR code shown on your other device.' : locale === 'de' ? 'Scanne den QR-Code, der auf deinem anderen Gerät angezeigt wird.' : 'Scanne le QR code affiché sur ton autre appareil.'}
               </p>
               <Link
                 href="/scan"
                 className="inline-block w-full text-center px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                📷 Scanner un QR code
+                {locale === 'en' ? '📷 Scan a QR code' : locale === 'de' ? '📷 QR-Code scannen' : '📷 Scanner un QR code'}
               </Link>
             </div>
           </div>
@@ -1169,22 +1169,22 @@ export default function V3SettingsPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-white">Activer Codex</p>
+                <p className="text-white">{locale === 'en' ? 'Enable Codex' : locale === 'de' ? 'Codex aktivieren' : 'Activer Codex'}</p>
                 <p className="text-sm text-gray-400">
-                  Ajoute des channels projet dédiés, routés vers l&apos;agent Codex OpenClaw.
+                  {locale === 'en' ? 'Adds dedicated project channels routed to the OpenClaw Codex agent.' : locale === 'de' ? 'Fügt dedizierte Projekt-Channels hinzu, die zum OpenClaw-Codex-Agenten geroutet werden.' : 'Ajoute des channels projet dédiés, routés vers l&apos;agent Codex OpenClaw.'}
                 </p>
               </div>
               <ToggleButton
                 isActive={codexEnabled}
                 onToggle={handleToggleCodex}
-                activeText="✓ Activé"
-                inactiveText="Désactivé"
+                activeText={locale === 'en' ? '✓ Enabled' : locale === 'de' ? '✓ Aktiv' : '✓ Activé'}
+                inactiveText={locale === 'en' ? 'Disabled' : locale === 'de' ? 'Deaktiviert' : 'Désactivé'}
               />
             </div>
 
             {!codexAgentConfigured && !codexAgentId && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-                Choisis un agent Codex pour router ces channels. Sans agent sélectionné, les channels Codex répondront en erreur.
+                {locale === 'en' ? 'Choose a Codex agent to route these channels. Without a selected agent, Codex channels will fail.' : locale === 'de' ? 'Wähle einen Codex-Agenten für diese Channels. Ohne ausgewählten Agenten schlagen Codex-Channels fehl.' : 'Choisis un agent Codex pour router ces channels. Sans agent sélectionné, les channels Codex répondront en erreur.'}
               </div>
             )}
 
@@ -1195,7 +1195,7 @@ export default function V3SettingsPage() {
                 onChange={(e) => handleSelectCodexAgent(e.target.value)}
                 className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Sélectionner un agent</option>
+                <option value="">{locale === 'en' ? 'Select an agent' : locale === 'de' ? 'Agent auswählen' : 'Sélectionner un agent'}</option>
                 {codexAgents.map((agent) => (
                   <option key={agent.id} value={agent.openclawAgentId || agent.id}>
                     {agent.name}{agent.model ? ` (${agent.model})` : ''}{agent.openclawAgentId ? ` · ${agent.openclawAgentId}` : ''}
@@ -1203,18 +1203,18 @@ export default function V3SettingsPage() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Cet agent OpenClaw recevra les messages des channels Codex. Le choix est sauvegardé immédiatement.
+                {locale === 'en' ? 'This OpenClaw agent will receive messages from Codex channels. The selection is saved immediately.' : locale === 'de' ? 'Dieser OpenClaw-Agent empfängt Nachrichten aus Codex-Channels. Die Auswahl wird sofort gespeichert.' : 'Cet agent OpenClaw recevra les messages des channels Codex. Le choix est sauvegardé immédiatement.'}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Clé API OpenAI / Codex</label>
+              <label className="block text-sm text-gray-400 mb-1">{locale === 'en' ? 'OpenAI / Codex API key' : locale === 'de' ? 'OpenAI- / Codex-API-Schlüssel' : 'Clé API OpenAI / Codex'}</label>
               <div className="flex gap-2">
                 <input
                   type={showCodexApiKey ? 'text' : 'password'}
                   value={codexApiKey}
                   onChange={(e) => setCodexApiKey(e.target.value)}
-                  placeholder={codexApiKeyConfigured ? `Configurée (${codexApiKeyHint || 'masquée'})` : 'sk-...'}
+                  placeholder={codexApiKeyConfigured ? `${locale === 'en' ? 'Configured' : locale === 'de' ? 'Konfiguriert' : 'Configurée'} (${codexApiKeyHint || (locale === 'en' ? 'hidden' : locale === 'de' ? 'ausgeblendet' : 'masquée')})` : 'sk-...'}
                   className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
@@ -1226,12 +1226,12 @@ export default function V3SettingsPage() {
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Laisse vide pour conserver la clé existante. La clé est stockée de façon chiffrée.
+                {locale === 'en' ? 'Leave empty to keep the existing key. The key is stored encrypted.' : locale === 'de' ? 'Leer lassen, um den vorhandenen Schlüssel zu behalten. Der Schlüssel wird verschlüsselt gespeichert.' : 'Laisse vide pour conserver la clé existante. La clé est stockée de façon chiffrée.'}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Channels projet Codex</label>
+              <label className="block text-sm text-gray-400 mb-1">{locale === 'en' ? 'Codex project channels' : locale === 'de' ? 'Codex-Projekt-Channels' : 'Channels projet Codex'}</label>
               <div className="rounded-lg border border-gray-700/80 bg-gray-700/30 p-4 space-y-3 mb-3">
                 <p className="text-xs font-semibold text-gray-300 uppercase tracking-wide">📎 Affectation</p>
                 <div>
@@ -1247,16 +1247,16 @@ export default function V3SettingsPage() {
                       }}
                       className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm"
                     >
-                      <option value="">-- Channel existant --</option>
+                      <option value="">{locale === 'en' ? '-- Existing channel --' : locale === 'de' ? '-- Vorhandener Channel --' : '-- Channel existant --'}</option>
                       {availableChannels.map((channel) => (
                         <option key={channel.key} value={channel.key}>
-                          #{channel.name || channel.key}{channel.agentId ? ' (déjà assigné)' : ''}
+                          #{channel.name || channel.key}{channel.agentId ? (locale === 'en' ? ' (already assigned)' : locale === 'de' ? ' (bereits zugewiesen)' : ' (déjà assigné)') : ''}
                         </option>
                       ))}
                     </select>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">ou créer :</span>
+                      <span className="text-xs text-gray-500">{locale === 'en' ? 'or create:' : locale === 'de' ? 'oder erstellen:' : 'ou créer :'}</span>
                       <input
                         type="text"
                         value={newCodexChannelName}
@@ -1276,17 +1276,17 @@ export default function V3SettingsPage() {
                       disabled={!selectedCodexChannel && !newCodexChannelName.trim()}
                       className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
                     >
-                      Ajouter ce channel Codex
+                      {locale === 'en' ? 'Add this Codex channel' : locale === 'de' ? 'Diesen Codex-Channel hinzufügen' : 'Ajouter ce channel Codex'}
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Choisis un channel existant ou crée-en un nouveau, puis ajoute-le à la liste ci-dessous.
+                    {locale === 'en' ? 'Choose an existing channel or create a new one, then add it to the list below.' : locale === 'de' ? 'Wähle einen vorhandenen Channel oder erstelle einen neuen und füge ihn dann der Liste unten hinzu.' : 'Choisis un channel existant ou crée-en un nouveau, puis ajoute-le à la liste ci-dessous.'}
                   </p>
                 </div>
               </div>
               <div className="rounded-lg border border-gray-700/80 bg-gray-800/70 p-4">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Channels Codex configurés
+                  {locale === 'en' ? 'Configured Codex channels' : locale === 'de' ? 'Konfigurierte Codex-Channels' : 'Channels Codex configurés'}
                 </div>
                 {codexProjectChannels.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
@@ -1309,23 +1309,23 @@ export default function V3SettingsPage() {
                   </div>
                 ) : (
                   <div className="text-sm text-gray-400">
-                    Aucun channel Codex configuré pour l&apos;instant.
+                    {locale === 'en' ? 'No Codex channel configured yet.' : locale === 'de' ? 'Noch kein Codex-Channel konfiguriert.' : 'Aucun channel Codex configuré pour l&apos;instant.'}
                   </div>
                 )}
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Les channels ajoutés ici seront routés vers l&apos;agent Codex sélectionné. Les actions sensibles restent protégées par confirmation explicite.
+                {locale === 'en' ? 'Channels added here will be routed to the selected Codex agent. Sensitive actions still require explicit confirmation.' : locale === 'de' ? 'Hier hinzugefügte Channels werden an den ausgewählten Codex-Agenten geroutet. Sensible Aktionen bleiben durch eine explizite Bestätigung geschützt.' : 'Les channels ajoutés ici seront routés vers l&apos;agent Codex sélectionné. Les actions sensibles restent protégées par confirmation explicite.'}
               </p>
             </div>
           </div>
         </section>
 
         <section className="bg-gray-800 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">💳 Coûts réels providers</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{locale === 'en' ? '💳 Real provider costs' : locale === 'de' ? '💳 Reale Provider-Kosten' : '💳 Coûts réels providers'}</h2>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Clé Admin OpenAI</label>
+              <label className="block text-sm text-gray-400 mb-1">{locale === 'en' ? 'OpenAI admin key' : locale === 'de' ? 'OpenAI-Admin-Schlüssel' : 'Clé Admin OpenAI'}</label>
               <div className="flex gap-2">
                 <input
                   type={showOpenAiAdminApiKey ? 'text' : 'password'}
@@ -1333,7 +1333,7 @@ export default function V3SettingsPage() {
                   onChange={(e) => setOpenAiAdminApiKey(e.target.value)}
                   placeholder={
                     openAiAdminKeyConfigured
-                      ? `Configurée (${openAiAdminKeyHint || 'masquée'})`
+                      ? `${locale === 'en' ? 'Configured' : locale === 'de' ? 'Konfiguriert' : 'Configurée'} (${openAiAdminKeyHint || (locale === 'en' ? 'hidden' : locale === 'de' ? 'ausgeblendet' : 'masquée')})`
                       : 'sk-admin-...'
                   }
                   className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1347,12 +1347,12 @@ export default function V3SettingsPage() {
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Utilisée pour récupérer les vrais coûts OpenAI sur la page Suivi des coûts. Laissez vide pour conserver la clé existante.
+                {locale === 'en' ? 'Used to fetch real OpenAI costs on the cost tracking page. Leave empty to keep the existing key.' : locale === 'de' ? 'Wird verwendet, um die echten OpenAI-Kosten auf der Kostenseite abzurufen. Leer lassen, um den vorhandenen Schlüssel zu behalten.' : 'Utilisée pour récupérer les vrais coûts OpenAI sur la page Suivi des coûts. Laissez vide pour conserver la clé existante.'}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Clé Admin Anthropic</label>
+              <label className="block text-sm text-gray-400 mb-1">{locale === 'en' ? 'Anthropic admin key' : locale === 'de' ? 'Anthropic-Admin-Schlüssel' : 'Clé Admin Anthropic'}</label>
               <div className="flex gap-2">
                 <input
                   type={showAnthropicAdminApiKey ? 'text' : 'password'}
@@ -1360,7 +1360,7 @@ export default function V3SettingsPage() {
                   onChange={(e) => setAnthropicAdminApiKey(e.target.value)}
                   placeholder={
                     anthropicAdminKeyConfigured
-                      ? `Configurée (${anthropicAdminKeyHint || 'masquée'})`
+                      ? `${locale === 'en' ? 'Configured' : locale === 'de' ? 'Konfiguriert' : 'Configurée'} (${anthropicAdminKeyHint || (locale === 'en' ? 'hidden' : locale === 'de' ? 'ausgeblendet' : 'masquée')})`
                       : 'sk-ant-admin-...'
                   }
                   className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1374,7 +1374,7 @@ export default function V3SettingsPage() {
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Prévu pour la même logique côté Anthropic. Vous pouvez déjà la stocker ici pour la suite.
+                {locale === 'en' ? 'Planned for the same Anthropic flow. You can already store it here for later.' : locale === 'de' ? 'Für denselben Anthropic-Flow vorgesehen. Du kannst ihn hier bereits für später speichern.' : 'Prévu pour la même logique côté Anthropic. Vous pouvez déjà la stocker ici pour la suite.'}
               </p>
             </div>
           </div>
@@ -1401,20 +1401,20 @@ export default function V3SettingsPage() {
             {/* Push notifications toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white">Notifications push</p>
+                <p className="text-white">{locale === 'en' ? 'Push notifications' : locale === 'de' ? 'Push-Benachrichtigungen' : 'Notifications push'}</p>
                 <p className="text-sm text-gray-400">
-                  {!isSupported && isNative && '📱 Notifications intégrées dans l\'app native - activez-les ci-dessous'}
-                  {!isSupported && !isNative && '📱 Non supporté sur ce navigateur/appareil'}
-                  {isSupported && permission === 'denied' && '❌ Bloquées - allez dans Réglages iOS > Notifications > Ekybot'}
-                  {isSupported && permission !== 'denied' && 'Recevoir une notification quand un agent envoie un message'}
+                  {!isSupported && isNative && (locale === 'en' ? '📱 Notifications are integrated in the native app — enable them below' : locale === 'de' ? '📱 Benachrichtigungen sind in der nativen App integriert — aktiviere sie unten' : '📱 Notifications intégrées dans l\'app native - activez-les ci-dessous')}
+                  {!isSupported && !isNative && (locale === 'en' ? '📱 Not supported on this browser/device' : locale === 'de' ? '📱 Auf diesem Browser/Gerät nicht unterstützt' : '📱 Non supporté sur ce navigateur/appareil')}
+                  {isSupported && permission === 'denied' && (locale === 'en' ? '❌ Blocked — go to iOS Settings > Notifications > Ekybot' : locale === 'de' ? '❌ Blockiert — gehe zu iOS Einstellungen > Mitteilungen > Ekybot' : '❌ Bloquées - allez dans Réglages iOS > Notifications > Ekybot')}
+                  {isSupported && permission !== 'denied' && (locale === 'en' ? 'Receive a notification when an agent sends a message' : locale === 'de' ? 'Erhalte eine Benachrichtigung, wenn ein Agent eine Nachricht sendet' : 'Recevoir une notification quand un agent envoie un message')}
                 </p>
               </div>
               {isSupported && permission !== 'denied' && (
                 <ToggleButton
                   isActive={isSubscribed}
                   onToggle={handleTogglePush}
-                  activeText="✓ Activé"
-                  inactiveText="Désactivé"
+                  activeText={locale === 'en' ? '✓ Enabled' : locale === 'de' ? '✓ Aktiv' : '✓ Activé'}
+                  inactiveText={locale === 'en' ? 'Disabled' : locale === 'de' ? 'Deaktiviert' : 'Désactivé'}
                   disabled={isTogglingPush}
                 />
               )}
@@ -1423,14 +1423,14 @@ export default function V3SettingsPage() {
             {/* Sound toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white">Son de notification</p>
-                <p className="text-sm text-gray-400">Jouer un son lors des notifications</p>
+                <p className="text-white">{locale === 'en' ? 'Notification sound' : locale === 'de' ? 'Benachrichtigungston' : 'Son de notification'}</p>
+                <p className="text-sm text-gray-400">{locale === 'en' ? 'Play a sound for notifications' : locale === 'de' ? 'Einen Ton bei Benachrichtigungen abspielen' : 'Jouer un son lors des notifications'}</p>
               </div>
               <ToggleButton
                 isActive={notificationSound}
                 onToggle={() => setNotificationSound(!notificationSound)}
-                activeText="✓ Activé"
-                inactiveText="Désactivé"
+                activeText={locale === 'en' ? '✓ Enabled' : locale === 'de' ? '✓ Aktiv' : '✓ Activé'}
+                inactiveText={locale === 'en' ? 'Disabled' : locale === 'de' ? 'Deaktiviert' : 'Désactivé'}
               />
             </div>
           </div>
@@ -1439,14 +1439,14 @@ export default function V3SettingsPage() {
         {/* User info - only show on web (not native) */}
         {!isNative && user && (
           <section className="bg-gray-800 rounded-lg p-4">
-            <h2 className="text-lg font-semibold text-white mb-2">👤 Compte</h2>
+            <h2 className="text-lg font-semibold text-white mb-2">{locale === 'en' ? '👤 Account' : locale === 'de' ? '👤 Konto' : '👤 Compte'}</h2>
             <p className="text-gray-400">{user?.primaryEmailAddress?.emailAddress}</p>
           </section>
         )}
 
         {!isNative && user && subscription && (
           <section className="bg-gray-800 rounded-lg p-4">
-            <h2 className="text-lg font-semibold text-white mb-4">💳 Abonnement</h2>
+            <h2 className="text-lg font-semibold text-white mb-4">{locale === 'en' ? '💳 Subscription' : locale === 'de' ? '💳 Abonnement' : '💳 Abonnement'}</h2>
             
             <div className="space-y-4">
               {/* Plan + Status */}

@@ -9,11 +9,11 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: {
-    default: 'EkyBot — Votre équipe d\'IA sur votre machine | Gratuit',
+    default: 'EkyBot — Your AI team on your machine | Free',
     template: '%s | EkyBot',
   },
-  description: 'Structurez et pilotez vos agents IA en équipe, gérez vos projets et vos coûts — comme une startup, sur votre machine.',
-  keywords: ['agent IA', 'multi-agent', 'self-hosted', 'OpenClaw', 'intelligence artificielle', 'productivité', 'privacy', 'RGPD', 'équipe IA'],
+  description: 'Structure and manage your AI agents as a team, with projects and costs under control — like a startup, on your own machine.',
+  keywords: ['AI agent', 'multi-agent', 'self-hosted', 'OpenClaw', 'artificial intelligence', 'productivity', 'privacy', 'GDPR', 'AI team'],
   authors: [{ name: 'Ekybot', url: 'https://ekybot.com' }],
   creator: 'Ekybot',
   publisher: 'Ekybot',
@@ -38,26 +38,26 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    locale: 'fr_FR',
-    alternateLocale: ['en_US', 'de_DE'],
+    locale: 'en_US',
+    alternateLocale: ['fr_FR', 'de_DE'],
     url: 'https://ekybot.com',
     siteName: 'Ekybot',
-    title: 'EkyBot — Votre équipe d\'IA sur votre machine',
-    description: 'Structurez et pilotez vos agents IA en équipe, gérez vos projets et vos coûts — comme une startup, sur votre machine.',
+    title: 'EkyBot — Your AI team on your machine',
+    description: 'Structure and manage your AI agents as a team, with projects and costs under control — like a startup, on your own machine.',
     images: [
       {
         url: 'https://ekybot.com/api/og',
         width: 1200,
         height: 630,
-        alt: 'EkyBot — Votre équipe d\'IA sur votre machine',
+        alt: 'EkyBot — Your AI team on your machine',
         type: 'image/png',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'EkyBot — Votre équipe d\'IA sur votre machine',
-    description: 'Structurez et pilotez vos agents IA en équipe, gérez vos projets et vos coûts — comme une startup, sur votre machine.',
+    title: 'EkyBot — Your AI team on your machine',
+    description: 'Structure and manage your AI agents as a team, with projects and costs under control — like a startup, on your own machine.',
     images: ['https://ekybot.com/api/og'],
   },
   appleWebApp: {
@@ -84,7 +84,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
+    <html lang="en">
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -103,7 +103,7 @@ export default function RootLayout({
               '@type': 'WebApplication',
               name: 'Ekybot',
               alternateName: 'Ekybot AI Assistant',
-              description: 'Ton assistant IA personnel, sous ton contrôle total. Connecte ton agent OpenClaw et discute depuis n\'importe où.',
+              description: 'Your personal AI assistant under your full control. Connect your OpenClaw agent and chat from anywhere.',
               url: 'https://ekybot.com',
               applicationCategory: 'Productivity',
               operatingSystem: 'Web, iOS',
@@ -111,7 +111,7 @@ export default function RootLayout({
                 '@type': 'Offer',
                 price: '0',
                 priceCurrency: 'EUR',
-                description: 'Gratuit - Utilise ton propre agent OpenClaw',
+                description: 'Free — Use your own OpenClaw agent',
               },
               aggregateRating: {
                 '@type': 'AggregateRating',

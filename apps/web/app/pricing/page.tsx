@@ -29,7 +29,7 @@ function FadeIn({ children, className = '', delay = 0 }: { children: React.React
 }
 
 export default function PricingPage() {
-  const { t, translations } = useTranslation();
+  const { t, locale } = useTranslation();
   const isNativeApp = useIsNativeApp();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   let isSignedIn = false;
@@ -40,45 +40,52 @@ export default function PricingPage() {
     getToken = auth.getToken ?? null;
   } catch {}
 
+  const isEnglish = locale === 'en';
+  const isGerman = locale === 'de';
+
   // NEW PRICING MODEL: FREE + ADD-ONS
   const freePlan = {
-    name: 'Plan Gratuit',
+    name: isEnglish ? 'Free Plan' : isGerman ? 'Kostenloser Plan' : 'Plan Gratuit',
     price: '0',
     period: '',
     agents: 3,
     users: 1,
     highlight: true,
-    description: 'Parfait pour commencer avec vos premiers agents IA',
+    description: isEnglish
+      ? 'Perfect for getting started with your first AI agents'
+      : isGerman
+        ? 'Perfekt für den Einstieg mit deinen ersten KI-Agenten'
+        : 'Parfait pour commencer avec vos premiers agents IA',
     included: [
       '3 agents',
-      '1 utilisateur'
+      isEnglish ? '1 user' : isGerman ? '1 Benutzer' : '1 utilisateur',
     ],
     features: [
-      'Contrôle à distance de vos agents',
+      isEnglish ? 'Remote control for your agents' : isGerman ? 'Fernsteuerung deiner Agenten' : 'Contrôle à distance de vos agents',
       'Mobile (iOS)',
       'Web & Desktop',
-      'Monitoring complet',
-      'Chat multi-agents'
+      isEnglish ? 'Full monitoring' : isGerman ? 'Vollständiges Monitoring' : 'Monitoring complet',
+      isEnglish ? 'Multi-agent chat' : isGerman ? 'Multi-Agenten-Chat' : 'Chat multi-agents',
     ],
-    cta: 'Commencer gratuitement',
+    cta: isEnglish ? 'Start for free' : isGerman ? 'Kostenlos starten' : 'Commencer gratuitement',
     priceKey: null,
     isFree: true
   };
 
   const addOns = [
     {
-      name: 'Agents supplémentaires',
+      name: isEnglish ? 'Additional agents' : isGerman ? 'Zusätzliche Agenten' : 'Agents supplémentaires',
       type: 'agents',
-      description: 'Ajoutez plus d\'agents à votre équipe',
+      description: isEnglish ? 'Add more agents to your team' : isGerman ? 'Füge deinem Team mehr Agenten hinzu' : 'Ajoutez plus d\'agents à votre équipe',
       price: '+2',
-      period: 'CHF / agent / mois',
+      period: isEnglish ? 'CHF / agent / month' : isGerman ? 'CHF / Agent / Monat' : 'CHF / agent / mois',
       icon: '🤖',
       color: 'blue'
     },
     {
       name: 'Multi-workspace (≤10)',
       type: 'users',
-      description: 'Support multi-workspace jusqu\'à 10 utilisateurs',
+      description: isEnglish ? 'Multi-workspace support for up to 10 users' : isGerman ? 'Multi-Workspace-Support für bis zu 10 Benutzer' : 'Support multi-workspace jusqu\'à 10 utilisateurs',
       price: '15',
       period: 'CHF/mois',
       icon: '🏢',
@@ -87,9 +94,9 @@ export default function PricingPage() {
     {
       name: 'Multi-workspace (>10)',
       type: 'users',
-      description: 'Facturation par utilisateur pour grandes équipes',
+      description: isEnglish ? 'Per-user billing for larger teams' : isGerman ? 'Abrechnung pro Benutzer für grössere Teams' : 'Facturation par utilisateur pour grandes équipes',
       price: '2',
-      period: 'CHF/user/mois',
+      period: isEnglish ? 'CHF/user/month' : isGerman ? 'CHF/Benutzer/Monat' : 'CHF/user/mois',
       icon: '👥',
       color: 'green'
     }
@@ -111,14 +118,14 @@ export default function PricingPage() {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Checkout impossible');
+        throw new Error(data.error || (isEnglish ? 'Unable to start checkout' : isGerman ? 'Checkout konnte nicht gestartet werden' : 'Checkout impossible'));
       }
       if (data.url) {
         window.location.href = data.url;
       }
     } catch (error) {
       console.error('[Pricing] Add-on checkout error:', error);
-      alert(error instanceof Error ? error.message : 'Checkout impossible');
+      alert(error instanceof Error ? error.message : (isEnglish ? 'Unable to start checkout' : isGerman ? 'Checkout konnte nicht gestartet werden' : 'Checkout impossible'));
     } finally {
       setCheckoutLoading(null);
     }
@@ -149,7 +156,7 @@ export default function PricingPage() {
             <div className="relative rounded-3xl p-8 bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border-2 border-blue-500/50 shadow-xl shadow-blue-500/20">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <div className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-full shadow-lg">
-                  🎉 Plan Recommandé
+                  {isEnglish ? '🎉 Recommended Plan' : isGerman ? '🎉 Empfohlener Plan' : '🎉 Plan Recommandé'}
                 </div>
               </div>
               
@@ -159,16 +166,16 @@ export default function PricingPage() {
                 
                 <div className="mb-8">
                   {isNativeApp ? (
-                    <span className="text-xl font-medium text-gray-200">Disponible sur le web</span>
+                    <span className="text-xl font-medium text-gray-200">{isEnglish ? 'Available on the web' : isGerman ? 'Im Web verfügbar' : 'Disponible sur le web'}</span>
                   ) : (
                     <span className="text-6xl font-bold text-white">0.- CHF</span>
                   )}
                   <div className="flex items-center justify-center gap-4 mt-4">
                     <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-sm font-medium">
-                      🤖 {freePlan.agents} agents inclus
+                      🤖 {freePlan.agents} {isEnglish ? 'agents included' : isGerman ? 'Agenten inklusive' : 'agents inclus'}
                     </span>
                     <span className="bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full text-sm font-medium">
-                      👤 1 utilisateur
+                      👤 {isEnglish ? '1 user' : isGerman ? '1 Benutzer' : '1 utilisateur'}
                     </span>
                   </div>
                 </div>
@@ -176,7 +183,7 @@ export default function PricingPage() {
                 <div className="grid md:grid-cols-2 gap-8 mb-8 text-left">
                   {/* Inclus Section */}
                   <div>
-                    <h4 className="text-lg font-semibold text-white mb-4">Inclus</h4>
+                    <h4 className="text-lg font-semibold text-white mb-4">{isEnglish ? 'Included' : isGerman ? 'Inklusive' : 'Inclus'}</h4>
                     <div className="space-y-3">
                       {freePlan.included.map((item, i) => (
                         <div key={`included-${i}`} className="flex items-start gap-3">
@@ -189,7 +196,7 @@ export default function PricingPage() {
                   
                   {/* Fonctionnalités Section */}
                   <div>
-                    <h4 className="text-lg font-semibold text-white mb-4">Fonctionnalités</h4>
+                    <h4 className="text-lg font-semibold text-white mb-4">{isEnglish ? 'Features' : isGerman ? 'Funktionen' : 'Fonctionnalités'}</h4>
                     <div className="space-y-3">
                       {freePlan.features.map((feature, i) => (
                         <div key={`features-${i}`} className="flex items-start gap-3">
@@ -205,7 +212,7 @@ export default function PricingPage() {
 
                 {isNativeApp ? (
                   <div className="inline-block bg-gray-700/60 text-gray-200 font-bold py-4 px-8 rounded-xl text-lg">
-                    Disponible sur le web
+                    {isEnglish ? 'Available on the web' : isGerman ? 'Im Web verfügbar' : 'Disponible sur le web'}
                   </div>
                 ) : (
                   <Link 

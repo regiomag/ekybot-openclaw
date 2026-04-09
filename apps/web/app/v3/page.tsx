@@ -668,14 +668,14 @@ const getDemoMessages = (lang: string): Message[] => {
       { id: 'demo-6', role: 'assistant', content: '📅 Termin hinzugefügt:\n\n**Arzt anrufen**\nMorgen, 10:00 - 10:30\n\nDu erhältst 15 Minuten vorher eine Benachrichtigung. Noch etwas?', timestamp: now - 90000 },
     ];
   }
-  // Default: French
+  // Default: English
   return [
-    { id: 'demo-1', role: 'user', content: 'Salut ! Qu\'est-ce que tu peux faire ?', timestamp: now - 300000 },
-    { id: 'demo-2', role: 'assistant', content: 'Bonjour ! 👋 Je suis ton assistant personnel connecté à OpenClaw.\n\nJe peux t\'aider avec :\n• 📅 Gérer ton calendrier et tes rappels\n• 📧 Lire et résumer tes emails\n• 🔍 Rechercher des informations\n• 💡 Répondre à tes questions\n• 📝 Prendre des notes\n• 🏠 Contrôler ta maison connectée\n\nQue puis-je faire pour toi ?', timestamp: now - 290000 },
-    { id: 'demo-3', role: 'user', content: 'Rappelle-moi d\'appeler le médecin demain à 10h', timestamp: now - 200000 },
-    { id: 'demo-4', role: 'assistant', content: '✅ C\'est noté ! Je t\'enverrai un rappel demain à 9h45 pour appeler le médecin.\n\nVeux-tu que j\'ajoute aussi cet événement à ton calendrier ?', timestamp: now - 190000 },
-    { id: 'demo-5', role: 'user', content: 'Oui s\'il te plaît', timestamp: now - 100000 },
-    { id: 'demo-6', role: 'assistant', content: '📅 Événement ajouté :\n\n**Appeler le médecin**\nDemain, 10:00 - 10:30\n\nTu recevras une notification 15 minutes avant. Autre chose ?', timestamp: now - 90000 },
+    { id: 'demo-1', role: 'user', content: 'Hi! What can you do?', timestamp: now - 300000 },
+    { id: 'demo-2', role: 'assistant', content: 'Hello! 👋 I\'m your personal assistant connected to OpenClaw.\n\nI can help you with:\n• 📅 Manage your calendar and reminders\n• 📧 Read and summarize your emails\n• 🔍 Search for information\n• 💡 Answer your questions\n• 📝 Take notes\n• 🏠 Control your smart home\n\nWhat can I do for you?', timestamp: now - 290000 },
+    { id: 'demo-3', role: 'user', content: 'Remind me to call the doctor tomorrow at 10am', timestamp: now - 200000 },
+    { id: 'demo-4', role: 'assistant', content: '✅ Got it! I\'ll send you a reminder tomorrow at 9:45am to call the doctor.\n\nWould you like me to add this event to your calendar too?', timestamp: now - 190000 },
+    { id: 'demo-5', role: 'user', content: 'Yes please', timestamp: now - 100000 },
+    { id: 'demo-6', role: 'assistant', content: '📅 Event added:\n\n**Call the doctor**\nTomorrow, 10:00 - 10:30\n\nYou\'ll receive a notification 15 minutes before. Anything else?', timestamp: now - 90000 },
   ];
 };
 
@@ -2484,7 +2484,7 @@ function ChatV3Content() {
   useEffect(() => {
     if (!canUseProtectedApis) return;
     if (checkoutStatus === 'success') {
-      setToast({ message: '✅ Abonnement activé ! Bienvenue.', type: 'success' });
+      setToast({ message: locale === 'en' ? '✅ Subscription activated! Welcome.' : locale === 'de' ? '✅ Abonnement aktiviert! Willkommen.' : '✅ Abonnement activé ! Bienvenue.', type: 'success' });
       // Force-sync subscription from Stripe (fallback if webhook delayed)
       getAuthHeaders()
         .then((headers) => fetch('/api/stripe/sync', { method: 'POST', headers }))
@@ -2500,7 +2500,7 @@ function ChatV3Content() {
       // Clean URL
       window.history.replaceState({}, '', '/v3');
     } else if (checkoutStatus === 'canceled') {
-      setToast({ message: 'Checkout annulé.', type: 'info' });
+      setToast({ message: locale === 'en' ? 'Checkout cancelled.' : locale === 'de' ? 'Checkout abgebrochen.' : 'Checkout annulé.', type: 'info' });
       window.history.replaceState({}, '', '/v3');
     }
   }, [canUseProtectedApis, checkoutStatus, getAuthHeaders]);
@@ -3130,7 +3130,7 @@ function ChatV3Content() {
       
     } catch (err) {
       console.error('[V3] Failed to start recording:', err);
-      setError({ message: 'Impossible d\'accéder au microphone. Vérifiez les permissions.' });
+      setError({ message: locale === 'en' ? 'Unable to access the microphone. Check permissions.' : locale === 'de' ? 'Kein Zugriff auf das Mikrofon. Berechtigungen prüfen.' : 'Impossible d\'accéder au microphone. Vérifiez les permissions.' });
     }
   }, []);
 
@@ -3271,7 +3271,7 @@ function ChatV3Content() {
       
       setLinkToTaskModal({ open: false, message: null });
       setError(null);
-      showToast('Message lié à la tâche ! ✓', 'success');
+      showToast(locale === 'en' ? 'Message linked to the task! ✓' : locale === 'de' ? 'Nachricht mit Aufgabe verknüpft! ✓' : 'Message lié à la tâche ! ✓', 'success');
     } catch (e) {
       console.error('[V3] Failed to link message to task:', e);
       setError({ message: 'Erreur lors de la liaison' });
@@ -3893,7 +3893,7 @@ function ChatV3Content() {
             const pendingMessageContent =
               typeof queueInfo.pendingMessageContent === 'string' && queueInfo.pendingMessageContent.trim().length > 0
                 ? queueInfo.pendingMessageContent
-                : '⏳ Tâche longue en cours… je reviendrai ici quand ce sera fini.';
+                : (locale === 'en' ? '⏳ Long task in progress… I will come back here when it is done.' : locale === 'de' ? '⏳ Lange Aufgabe läuft… ich komme hierher zurück, wenn sie fertig ist.' : '⏳ Tâche longue en cours… je reviendrai ici quand ce sera fini.');
 
             setChannels(prev => prev.map(ch => {
               if (ch.key !== targetChannelKey) return ch;
@@ -3960,7 +3960,7 @@ function ChatV3Content() {
           }
           showToast(
             queueInfo.deliveryMode === 'long_run'
-              ? 'Tâche longue lancée. La réponse finale arrivera dans ce fil.'
+              ? (locale === 'en' ? 'Long task started. The final reply will arrive in this thread.' : locale === 'de' ? 'Lange Aufgabe gestartet. Die endgültige Antwort erscheint in diesem Thread.' : 'Tâche longue lancée. La réponse finale arrivera dans ce fil.')
               : buildCompanionToastMessage({
                   locale: resolveLocale(locale),
                   deliveryMode: queueInfo.deliveryMode,
@@ -4025,7 +4025,7 @@ function ChatV3Content() {
           if (rawText.trim().startsWith('<!') || rawText.trim().startsWith('<html')) {
             // HTML error page from Cloudflare/proxy — never show raw HTML
             const statusMessages: Record<number, string> = {
-              524: 'Timeout — le serveur a mis trop longtemps à répondre',
+              524: locale === 'en' ? 'Timeout — the server took too long to respond' : locale === 'de' ? 'Timeout — der Server hat zu lange zum Antworten gebraucht' : 'Timeout — le serveur a mis trop longtemps à répondre',
               502: 'Gateway indisponible',
               503: 'Service temporairement indisponible',
               504: 'Timeout gateway',
@@ -4480,13 +4480,13 @@ function ChatV3Content() {
       {!isDemo && !isScreenshot && subscription && subscription.plan === 'free' && !isNativeApp && (
         <div className="px-4 py-2.5 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 border-b border-blue-500/30 flex items-center justify-between">
           <span className="text-sm text-blue-200">
-            🎁 Plan gratuit — 3 agents. <span className="text-blue-400">Passez à Starter pour 10 agents.</span>
+            {locale === 'en' ? '🎁 Free plan — 3 agents. ' : locale === 'de' ? '🎁 Kostenloser Plan — 3 Agenten. ' : '🎁 Plan gratuit — 3 agents. '}<span className="text-blue-400">{locale === 'en' ? 'Upgrade to Starter for 10 agents.' : locale === 'de' ? 'Wechsle zu Starter für 10 Agenten.' : 'Passez à Starter pour 10 agents.'}</span>
           </span>
           <a
             href="/pricing"
             className="text-xs bg-blue-500 hover:bg-blue-400 text-white font-medium px-3 py-1 rounded-lg transition-colors"
           >
-            Voir les plans
+            {locale === 'en' ? 'View plans' : locale === 'de' ? 'Pläne ansehen' : 'Voir les plans'}
           </a>
         </div>
       )}
@@ -4501,8 +4501,8 @@ function ChatV3Content() {
               : 'bg-gray-700/90'
         }`}>
           <span className="text-white">
-            💰 Budget: ${channelBudget.used.toFixed(2)} / ${channelBudget.budget.toFixed(2)}
-            {channelBudget.isOverBudget && ' ⚠️ Dépassé!'}
+            💰 {locale === 'en' ? 'Budget' : locale === 'de' ? 'Budget' : 'Budget'}: ${channelBudget.used.toFixed(2)} / ${channelBudget.budget.toFixed(2)}
+            {channelBudget.isOverBudget && (locale === 'en' ? ' ⚠️ Over limit!' : locale === 'de' ? ' ⚠️ Limit überschritten!' : ' ⚠️ Dépassé!')}
           </span>
           <div className="w-24 h-2 bg-gray-600 rounded-full overflow-hidden">
             <div 
@@ -4528,7 +4528,7 @@ function ChatV3Content() {
               }}
               className="px-3 py-1 bg-white text-blue-600 text-sm font-medium rounded"
             >
-              Activer
+              {locale === 'en' ? 'Enable' : locale === 'de' ? 'Aktivieren' : 'Activer'}
             </button>
             <button
               onClick={() => setShowPushBanner(false)}
@@ -4805,8 +4805,8 @@ function ChatV3Content() {
                       }
 
                       const resetContent = contextSummary
-                        ? `🔄 [RESET] Session réinitialisée.\n\n**Contexte pré-reset :**\n${contextSummary}\n\nMerci de reprendre à partir de ce contexte.`
-                        : '🔄 [RESET] La conversation a été réinitialisée. Merci de consulter l\'historique des messages précédents pour le contexte.';
+                        ? (locale === 'en' ? `🔄 [RESET] Session reset.\n\n**Pre-reset context:**\n${contextSummary}\n\nPlease continue from this context.` : locale === 'de' ? `🔄 [RESET] Sitzung zurückgesetzt.\n\n**Kontext vor dem Reset:**\n${contextSummary}\n\nBitte ab diesem Kontext fortfahren.` : `🔄 [RESET] Session réinitialisée.\n\n**Contexte pré-reset :**\n${contextSummary}\n\nMerci de reprendre à partir de ce contexte.`)
+                        : (locale === 'en' ? '🔄 [RESET] Conversation reset. Please review the previous message history for context.' : locale === 'de' ? '🔄 [RESET] Gespräch zurückgesetzt. Bitte prüfe den bisherigen Nachrichtenverlauf für den Kontext.' : '🔄 [RESET] La conversation a été réinitialisée. Merci de consulter l\'historique des messages précédents pour le contexte.');
 
                       const resetHeaders = await getAuthHeaders();
                       await fetch('/api/messages', {
@@ -4833,7 +4833,7 @@ function ChatV3Content() {
                   }}
                   className="w-full px-4 py-2 text-sm text-orange-400 bg-gray-700 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isResetting ? (<><span className="animate-spin">⏳</span> {t('chat.resetting') || 'Reset en cours...'}</>) : t('chat.resetConversation')}
+                  {isResetting ? (<><span className="animate-spin">⏳</span> {t('chat.resetting') || (locale === 'en' ? 'Resetting...' : locale === 'de' ? 'Zurücksetzen...' : 'Reset en cours...')}</>) : t('chat.resetConversation')}
                 </button>
               </div>
             </div>
@@ -5135,7 +5135,7 @@ function ChatV3Content() {
                   <div className="mt-1 text-lg font-semibold text-amber-100">
                     {codexContext?.binding.project
                       ? `${codexContext.binding.project.icon || '📁'} ${codexContext.binding.project.name}`
-                      : 'Projet non lié'}
+                      : (locale === 'en' ? 'Project not linked' : locale === 'de' ? 'Projekt nicht verknüpft' : 'Projet non lié')}
                   </div>
                   <div className="mt-1 text-sm text-amber-100/70">
                     Channel #{activeChannelKey}
@@ -5165,13 +5165,13 @@ function ChatV3Content() {
                 <div className="mt-3 rounded-xl border border-amber-400/20 bg-black/20 p-3">
                   <div className="grid gap-3 md:grid-cols-3">
                     <label className="text-sm text-white/80">
-                      <div className="mb-1 text-xs uppercase tracking-[0.18em] text-white/40">Projet</div>
+                      <div className="mb-1 text-xs uppercase tracking-[0.18em] text-white/40">{locale === 'en' ? 'Project' : locale === 'de' ? 'Projekt' : 'Projet'}</div>
                       <select
                         value={codexProjectId}
                         onChange={(event) => setCodexProjectId(event.target.value)}
                         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white"
                       >
-                        <option value="">Aucun projet explicite</option>
+                        <option value="">{locale === 'en' ? 'No explicit project' : locale === 'de' ? 'Kein explizites Projekt' : 'Aucun projet explicite'}</option>
                         {codexProjectOptions.map((project) => (
                           <option key={project.id} value={project.id}>
                             {(project.icon || '📁') + ' ' + project.name}
@@ -5212,7 +5212,7 @@ function ChatV3Content() {
                         }}
                         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white"
                       >
-                        <option value="">Aucune machine explicite</option>
+                        <option value="">{locale === 'en' ? 'No explicit machine' : locale === 'de' ? 'Keine explizite Maschine' : 'Aucune machine explicite'}</option>
                         {codexContext?.options.machines.map((machine) => (
                           <option key={machine.id} value={machine.id}>
                             {machine.machineName} · {machine.status}
@@ -5230,7 +5230,7 @@ function ChatV3Content() {
                         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="">
-                          {selectedCodexMachine ? 'Aucun agent explicite' : 'Choisis une machine d’abord'}
+                          {selectedCodexMachine ? (locale === 'en' ? 'No explicit agent' : locale === 'de' ? 'Kein expliziter Agent' : 'Aucun agent explicite') : (locale === 'en' ? 'Choose a machine first' : locale === 'de' ? 'Wähle zuerst eine Maschine' : 'Choisis une machine d’abord')}
                         </option>
                         {codexSelectableAgents.map((agent) => (
                           <option key={agent.openclawAgentId} value={agent.openclawAgentId}>
@@ -5242,7 +5242,7 @@ function ChatV3Content() {
                         {codexProjectId
                           ? codexSelectableAgents.some((agent) => agent.projectId === codexProjectId)
                             ? 'Agents filtres pour le projet selectionne.'
-                            : 'Aucun agent strictement lie a ce projet sur cette machine ; affichage du fallback machine.'
+                            : (locale === 'en' ? 'No agent is strictly linked to this project on this machine; showing the machine fallback.' : locale === 'de' ? 'Kein Agent ist auf dieser Maschine strikt mit diesem Projekt verknüpft; Maschinen-Fallback wird angezeigt.' : 'Aucun agent strictement lie a ce projet sur cette machine ; affichage du fallback machine.')}
                           : 'Choisis un projet pour restreindre plus finement le workspace agent.'}
                       </div>
                     </label>
@@ -5254,13 +5254,13 @@ function ChatV3Content() {
                       disabled={codexBindingSaving}
                       className="rounded-md bg-amber-500 px-3 py-2 text-sm font-medium text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {codexBindingSaving ? 'Enregistrement...' : 'Sauvegarder le binding'}
+                      {codexBindingSaving ? (locale === 'en' ? 'Saving...' : locale === 'de' ? 'Speichern...' : 'Enregistrement...') : (locale === 'en' ? 'Save binding' : locale === 'de' ? 'Binding speichern' : 'Sauvegarder le binding')}
                     </button>
                     <button
                       onClick={() => setCodexBindingEditing(false)}
                       className="rounded-md border border-white/15 px-3 py-2 text-sm text-white/80 hover:border-white/30 hover:text-white"
                     >
-                      Annuler
+                      {locale === 'en' ? 'Cancel' : locale === 'de' ? 'Abbrechen' : 'Annuler'}
                     </button>
                   </div>
                 </div>
@@ -5270,20 +5270,20 @@ function ChatV3Content() {
                 <div className="rounded-lg bg-white/5 px-3 py-2">
                   <div className="text-xs uppercase text-white/40">Machine</div>
                   <div className="mt-1 font-medium text-white">
-                    {codexContext?.binding.machine?.machineName || 'Aucune machine liée'}
+                    {codexContext?.binding.machine?.machineName || (locale === 'en' ? 'No linked machine' : locale === 'de' ? 'Keine verknüpfte Maschine' : 'Aucune machine liée')}
                   </div>
                   <div className="mt-1 text-white/60">
                     {codexContext?.binding.machine
                       ? `${codexContext.binding.machine.status} · ${
                           formatDateTime(codexContext.binding.machine.lastSeenAt) || 'seen unknown'
                         }`
-                      : 'Relie une machine Companion pour exécuter le workspace.'}
+                      : (locale === 'en' ? 'Link a Companion machine to run the workspace.' : locale === 'de' ? 'Verknüpfe eine Companion-Maschine, um den Workspace auszuführen.' : 'Relie une machine Companion pour exécuter le workspace.')}
                   </div>
                 </div>
                 <div className="rounded-lg bg-white/5 px-3 py-2">
                   <div className="text-xs uppercase text-white/40">Workspace</div>
                   <div className="mt-1 font-medium text-white">
-                    {codexContext?.binding.workspace?.workspacePath || 'Aucun workspace détecté'}
+                    {codexContext?.binding.workspace?.workspacePath || (locale === 'en' ? 'No workspace detected' : locale === 'de' ? 'Kein Workspace erkannt' : 'Aucun workspace détecté')}
                   </div>
                   <div className="mt-1 text-white/60">
                     {codexContext?.memory?.runtimeKeyCount
@@ -5291,7 +5291,7 @@ function ChatV3Content() {
                           formatDateTime(codexContext.memory.lastMemoryUploadedAt || codexContext.memory.latestRuntimeUpdatedAt) ||
                           'sync inconnue'
                         }`
-                      : 'La mémoire runtime apparaîtra après le premier sync Companion.'}
+                      : (locale === 'en' ? 'Runtime memory will appear after the first Companion sync.' : locale === 'de' ? 'Die Laufzeit-Speicherung erscheint nach der ersten Companion-Synchronisierung.' : 'La mémoire runtime apparaîtra après le premier sync Companion.')}
                   </div>
                 </div>
               </div>
@@ -5300,7 +5300,7 @@ function ChatV3Content() {
                 <div className="mt-3 text-sm text-red-300">Contexte Codex indisponible : {codexContextError}</div>
               )}
               {codexContextLoading && (
-                <div className="mt-3 text-sm text-amber-200/80">Chargement du contexte Codex...</div>
+                <div className="mt-3 text-sm text-amber-200/80">{locale === 'en' ? 'Loading Codex context...' : locale === 'de' ? 'Codex-Kontext wird geladen...' : 'Chargement du contexte Codex...'}</div>
               )}
             </div>
           )}
@@ -5367,14 +5367,14 @@ function ChatV3Content() {
               )}
 
               {longRunningRunLoading && activeLongRunningRun && (
-                <div className="mt-3 text-sm text-current/70">Chargement du run actif...</div>
+                <div className="mt-3 text-sm text-current/70">{locale === 'en' ? 'Loading active run...' : locale === 'de' ? 'Aktiver Run wird geladen...' : 'Chargement du run actif...'}</div>
               )}
             </div>
           )}
 
           {shouldShowTechnicalStatusBanner && (
             <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Les diagnostics temps réel sont temporairement indisponibles.
+              {locale === 'en' ? 'Realtime diagnostics are temporarily unavailable.' : locale === 'de' ? 'Echtzeitdiagnosen sind vorübergehend nicht verfügbar.' : 'Les diagnostics temps réel sont temporairement indisponibles.'}
               {longRunningRunError && (
                 <div className="mt-2 text-xs text-amber-200/80">Run actif: {longRunningRunError}</div>
               )}
@@ -5441,8 +5441,8 @@ function ChatV3Content() {
                       } catch (_e) { /* continue without summary */ }
 
                       const rc = ctxSum
-                        ? `🔄 [RESET] Session réinitialisée (limite contexte).\n\n**Contexte pré-reset :**\n${ctxSum}\n\nMerci de reprendre à partir de ce contexte.`
-                        : '🔄 [RESET] Conversation réinitialisée (limite contexte). Consulte l\'historique.';
+                        ? (locale === 'en' ? `🔄 [RESET] Session reset (context limit).\n\n**Pre-reset context:**\n${ctxSum}\n\nPlease continue from this context.` : locale === 'de' ? `🔄 [RESET] Sitzung zurückgesetzt (Kontextlimit).\n\n**Kontext vor dem Reset:**\n${ctxSum}\n\nBitte ab diesem Kontext fortfahren.` : `🔄 [RESET] Session réinitialisée (limite contexte).\n\n**Contexte pré-reset :**\n${ctxSum}\n\nMerci de reprendre à partir de ce contexte.`)
+                        : (locale === 'en' ? '🔄 [RESET] Conversation reset (context limit). Check the history.' : locale === 'de' ? '🔄 [RESET] Gespräch zurückgesetzt (Kontextlimit). Prüfe den Verlauf.' : '🔄 [RESET] Conversation réinitialisée (limite contexte). Consulte l\'historique.')}
 
                       const resetHeaders = await getAuthHeaders();
                       await fetch('/api/messages', {
@@ -5540,7 +5540,7 @@ function ChatV3Content() {
                     {/* CC message indicator */}
                     {isCCMessage && (
                       <span className="text-xs font-medium text-purple-400">
-                        📋 Message transféré
+                        {locale === 'en' ? '📋 Forwarded message' : locale === 'de' ? '📋 Weitergeleitete Nachricht' : '📋 Message transféré'}
                       </span>
                     )}
                   <div
@@ -5611,7 +5611,7 @@ function ChatV3Content() {
                     {msg.linkedTask && (
                       <div className="text-xs mb-2 px-2 py-1 rounded bg-purple-600/30 border border-purple-500/50 flex items-center gap-1">
                         <span>📌</span>
-                        <span className="opacity-80">Lié à :</span>
+                        <span className="opacity-80">{locale === 'en' ? 'Linked to:' : locale === 'de' ? 'Verknüpft mit:' : 'Lié à :'}</span>
                         <span className="font-medium truncate">{msg.linkedTask.title}</span>
                       </div>
                     )}
@@ -5694,7 +5694,7 @@ function ChatV3Content() {
                     <button
                       onClick={() => setReactionPickerMessageId(reactionPickerMessageId === msg.id ? null : msg.id)}
                       className="w-7 h-7 flex items-center justify-center text-base bg-gray-600 hover:bg-gray-500 active:bg-gray-400 rounded-full transition-colors shadow-sm"
-                      title="Réagir"
+                      title={locale === 'en' ? 'React' : locale === 'de' ? 'Reagieren' : 'Réagir'}
                     >
                       😀
                     </button>
@@ -5748,7 +5748,7 @@ function ChatV3Content() {
                   <div>
                     <span className={`text-sm ${error.messageSent ? 'text-yellow-300' : 'text-red-300'}`}>{error.message}</span>
                     {error.messageSent && (
-                      <span className="text-green-400 text-xs ml-2">✓ Message sauvegardé, il sera délivré dès que possible</span>
+                      <span className="text-green-400 text-xs ml-2">{locale === 'en' ? '✓ Message saved, it will be delivered as soon as possible' : locale === 'de' ? '✓ Nachricht gespeichert, sie wird so bald wie möglich zugestellt' : '✓ Message sauvegardé, il sera délivré dès que possible'}</span>
                     )}
                   </div>
                 </div>
@@ -5800,7 +5800,7 @@ function ChatV3Content() {
                     <button
                       onClick={() => removeFromQueue(msg.id)}
                       className="text-yellow-400 hover:text-red-400 text-sm"
-                      title="Supprimer de la queue"
+                      title={locale === 'en' ? 'Remove from queue' : locale === 'de' ? 'Aus Warteschlange entfernen' : 'Supprimer de la queue'}
                     >
                       ×
                     </button>
@@ -5869,20 +5869,20 @@ function ChatV3Content() {
             <div className="px-4 py-2 bg-red-900/50 border-t border-red-700/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
-                <span className="text-red-300 text-sm">Enregistrement... {recordingDuration}s</span>
+                <span className="text-red-300 text-sm">{locale === 'en' ? 'Recording...' : locale === 'de' ? 'Aufnahme...' : 'Enregistrement...'} {recordingDuration}s</span>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={stopRecording}
                   className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
                 >
-                  ✓ Terminer
+                  {locale === 'en' ? '✓ Finish' : locale === 'de' ? '✓ Beenden' : '✓ Terminer'}
                 </button>
                 <button
                   onClick={cancelRecording}
                   className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
                 >
-                  ✕ Annuler
+                  {locale === 'en' ? '✕ Cancel' : locale === 'de' ? '✕ Abbrechen' : '✕ Annuler'}
                 </button>
               </div>
             </div>
@@ -5898,7 +5898,7 @@ function ChatV3Content() {
                   onClick={removePendingAudio}
                   className="px-2 py-1 text-red-400 hover:text-red-300 text-sm"
                 >
-                  ✕ Supprimer
+                  {locale === 'en' ? '✕ Remove' : locale === 'de' ? '✕ Entfernen' : '✕ Supprimer'}
                 </button>
               </div>
             </div>
@@ -5910,14 +5910,14 @@ function ChatV3Content() {
               <div className="flex items-start gap-2 bg-gray-700/50 rounded-lg p-2 border-l-4 border-green-500">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-green-400 font-medium mb-1">
-                    ↩️ En réponse à {replyToMessage.role === 'assistant' ? agentName : 'vous'} :
+                    ↩️ {locale === 'en' ? 'Replying to' : locale === 'de' ? 'Antwort auf' : 'En réponse à'} {replyToMessage.role === 'assistant' ? agentName : (locale === 'en' ? 'you' : locale === 'de' ? 'dich' : 'vous')} :
                   </p>
                   <p className="text-sm text-gray-300 truncate">{replyToMessage.content}</p>
                 </div>
                 <button
                   onClick={() => setReplyToMessage(null)}
                   className="text-gray-400 hover:text-red-400 p-1"
-                  title="Annuler la réponse"
+                  title={locale === 'en' ? 'Cancel reply' : locale === 'de' ? 'Antwort abbrechen' : 'Annuler la réponse'}
                 >
                   ✕
                 </button>
@@ -5931,14 +5931,14 @@ function ChatV3Content() {
               <div className="flex items-center gap-2 bg-blue-900/30 rounded-lg p-2 border-l-4 border-blue-500">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-blue-400 font-medium">
-                    📌 Sera lié à la tâche :
+                    📌 {locale === 'en' ? 'Will be linked to the task:' : locale === 'de' ? 'Wird mit der Aufgabe verknüpft:' : 'Sera lié à la tâche :'}
                   </p>
                   <p className="text-sm text-gray-300 truncate">{preLinkedTask.title}</p>
                 </div>
                 <button
                   onClick={() => setPreLinkedTask(null)}
                   className="text-gray-400 hover:text-red-400 p-1"
-                  title="Annuler la liaison"
+                  title={locale === 'en' ? 'Cancel link' : locale === 'de' ? 'Verknüpfung abbrechen' : 'Annuler la liaison'}
                 >
                   ✕
                 </button>
@@ -5960,7 +5960,7 @@ function ChatV3Content() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="shrink-0 w-8 h-8 flex items-center justify-center bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 text-sm"
-                title="Ajouter une image"
+                title={locale === 'en' ? 'Add an image' : locale === 'de' ? 'Bild hinzufügen' : 'Ajouter une image'}
                 disabled={isRecording}
               >
                 📎
@@ -5973,7 +5973,7 @@ function ChatV3Content() {
                     ? 'bg-red-600 text-white animate-pulse' 
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
-                title={isRecording ? 'Stop' : 'Vocal'}
+                title={isRecording ? (locale === 'en' ? 'Stop' : locale === 'de' ? 'Stoppen' : 'Stop') : (locale === 'en' ? 'Voice' : locale === 'de' ? 'Sprache' : 'Vocal')}
                 disabled={!!pendingAudio}
               >
                 🎤
@@ -5989,7 +5989,7 @@ function ChatV3Content() {
                     ? 'bg-blue-600 text-white' 
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
-                title={preLinkedTask ? `Lié à: ${preLinkedTask.title}` : 'Lier à une tâche'}
+                title={preLinkedTask ? `${locale === 'en' ? 'Linked to' : locale === 'de' ? 'Verknüpft mit' : 'Lié à'}: ${preLinkedTask.title}` : (locale === 'en' ? 'Link to a task' : locale === 'de' ? 'Mit Aufgabe verknüpfen' : 'Lier à une tâche')}
                 disabled={isRecording}
               >
                 📌
@@ -6010,7 +6010,7 @@ function ChatV3Content() {
                     style={{ minWidth: '280px' }}
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs text-gray-400">{t('chat.selectTask')}</span>
+                        <span className="text-xs text-gray-400">{locale === 'en' ? 'Choose an emoji' : locale === 'de' ? 'Emoji auswählen' : 'Choisir un emoji'}</span>
                       <button 
                         onClick={() => setShowEmojiPicker(false)}
                         className="text-gray-400 hover:text-white"
@@ -6082,7 +6082,7 @@ function ChatV3Content() {
                     ? 'bg-yellow-600 hover:bg-yellow-700' 
                     : 'bg-blue-600 hover:bg-blue-700'
                 }`}
-                title={isLoading ? 'Queue' : 'Envoyer'}
+                title={isLoading ? (locale === 'en' ? 'Queue' : locale === 'de' ? 'Warteschlange' : 'Queue') : t('chat.send')}
               >
                 {isLoading ? '⏳' : '→'}
               </button>
@@ -6109,7 +6109,7 @@ function ChatV3Content() {
                     }
                   }}
                   className="shrink-0 w-8 h-8 flex items-center justify-center bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
-                  title="Arrêter"
+                  title={locale === 'en' ? 'Stop' : locale === 'de' ? 'Stoppen' : 'Arrêter'}
                 >
                   ⏹
                 </button>
@@ -6122,7 +6122,7 @@ function ChatV3Content() {
                 onChange={(event) => setIsLongRun(event.target.checked)}
                 className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-500"
               />
-              Tâche longue
+              {locale === 'en' ? 'Long task' : locale === 'de' ? 'Lange Aufgabe' : 'Tâche longue'}
             </label>
           </div>
         </main>
@@ -6180,7 +6180,7 @@ function ChatV3Content() {
           />
           <div className="relative bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">📌 Lier à une tâche</h3>
+              <h3 className="text-lg font-semibold text-white">{locale === 'en' ? '📌 Link to a task' : locale === 'de' ? '📌 Mit Aufgabe verknüpfen' : '📌 Lier à une tâche'}</h3>
               <button
                 onClick={() => setLinkToTaskModal({ open: false, message: null })}
                 className="text-gray-400 hover:text-white text-xl"
@@ -6191,14 +6191,14 @@ function ChatV3Content() {
             
             {/* Message preview */}
             <div className="bg-gray-700/50 rounded p-3 mb-4">
-              <p className="text-xs text-gray-400 mb-1">Message à lier :</p>
+              <p className="text-xs text-gray-400 mb-1">{locale === 'en' ? 'Message to link:' : locale === 'de' ? 'Zu verknüpfende Nachricht:' : 'Message à lier :'}</p>
               <p className="text-sm text-gray-200 line-clamp-3">{linkToTaskModal.message?.content}</p>
             </div>
             
             {/* Task list */}
             <div className="flex-1 overflow-y-auto space-y-2">
               {roadmapTasks.length === 0 ? (
-                <p className="text-gray-400 text-center py-4">Aucune tâche active</p>
+                <p className="text-gray-400 text-center py-4">{t('chat.noActiveTasks')}</p>
               ) : (
                 roadmapTasks.map(task => (
                   <button
@@ -6213,8 +6213,8 @@ function ChatV3Content() {
                         'bg-gray-600'
                       }`}>
                         {task.status === 'in_progress' ? 'En cours' :
-                         task.status === 'testing' ? 'À tester' :
-                         'À faire'}
+                         task.status === 'testing' ? (locale === 'en' ? 'To test' : locale === 'de' ? 'Zu testen' : 'À tester') :
+                         (locale === 'en' ? 'To do' : locale === 'de' ? 'Zu erledigen' : 'À faire')}
                       </span>
                     </div>
                     <p className="text-sm text-gray-200 mt-1 truncate">{task.title}</p>
@@ -6235,7 +6235,7 @@ function ChatV3Content() {
           />
           <div className="relative bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">📌 Lier le prochain message</h3>
+              <h3 className="text-lg font-semibold text-white">{locale === 'en' ? '📌 Link the next message' : locale === 'de' ? '📌 Nächste Nachricht verknüpfen' : '📌 Lier le prochain message'}</h3>
               <button
                 onClick={() => setShowPreLinkModal(false)}
                 className="text-gray-400 hover:text-white text-xl"
@@ -6245,13 +6245,13 @@ function ChatV3Content() {
             </div>
             
             <p className="text-sm text-gray-400 mb-4">
-              Sélectionne une tâche. Ton prochain message sera automatiquement lié comme commentaire.
+              {locale === 'en' ? 'Choose a task. Your next message will automatically be linked as a comment.' : locale === 'de' ? 'Wähle eine Aufgabe. Deine nächste Nachricht wird automatisch als Kommentar verknüpft.' : 'Sélectionne une tâche. Ton prochain message sera automatiquement lié comme commentaire.'}
             </p>
             
             {/* Task list */}
             <div className="flex-1 overflow-y-auto space-y-2">
               {roadmapTasks.length === 0 ? (
-                <p className="text-gray-400 text-center py-4">Aucune tâche active</p>
+                <p className="text-gray-400 text-center py-4">{t('chat.noActiveTasks')}</p>
               ) : (
                 roadmapTasks.map(task => (
                   <button
@@ -6274,9 +6274,9 @@ function ChatV3Content() {
                         'bg-gray-600'
                       }`}>
                         {task.status === 'in_progress' ? 'En cours' :
-                         task.status === 'testing' ? 'À tester' :
+                         task.status === 'testing' ? (locale === 'en' ? 'To test' : locale === 'de' ? 'Zu testen' : 'À tester') :
                          task.status === 'pipeline' ? 'Pipeline' :
-                         'À faire'}
+                         (locale === 'en' ? 'To do' : locale === 'de' ? 'Zu erledigen' : 'À faire')}
                       </span>
                     </div>
                     <p className="text-sm text-gray-200 mt-1 truncate">{task.title}</p>
@@ -6294,7 +6294,7 @@ function ChatV3Content() {
                 }}
                 className="mt-4 w-full py-2 text-red-400 hover:text-red-300 text-sm"
               >
-                ✕ Annuler la liaison
+                {locale === 'en' ? '✕ Cancel link' : locale === 'de' ? '✕ Verknüpfung abbrechen' : '✕ Annuler la liaison'}
               </button>
             )}
           </div>
@@ -6309,7 +6309,7 @@ export default function ChatV3() {
   return (
     <Suspense fallback={
       <div className="h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Chargement...</div>
+        <div className="text-white">{t('common.loading')}</div>
       </div>
     }>
       <ChatV3Content />

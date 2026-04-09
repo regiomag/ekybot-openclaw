@@ -582,7 +582,7 @@ export default function AgentsPage() {
   const isNative = useIsNativeApp(); // Detect iOS/native app
   
   // Get locale for demo data localization
-  const [locale, setLocale] = useState('fr');
+  const [locale, setLocale] = useState('en');
   useEffect(() => {
     const saved = localStorage.getItem('ekybot-locale');
     if (saved) setLocale(saved);
@@ -590,7 +590,7 @@ export default function AgentsPage() {
   // Dynamic main agent from API (multi-tenant)  
   const [mainAgent, setMainAgent] = useState<Agent | null>(null);
   
-  const mainAgentName = isDemo ? 'Big Boss' : (mainAgent?.name || 'Orchestrateur');
+  const mainAgentName = isDemo ? 'Big Boss' : (mainAgent?.name || (locale === 'en' ? 'Orchestrator' : locale === 'de' ? 'Orchestrator' : 'Orchestrateur'));
   const mainAgentEmoji = isDemo ? '⚡' : (mainAgent?.icon || '🤖');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [unlinkingAgentIds, setUnlinkingAgentIds] = useState<string[]>([]);
@@ -2008,7 +2008,7 @@ export default function AgentsPage() {
         <div className="flex items-center justify-center py-20">
           <div className="text-center">
             <div className="text-4xl mb-4 animate-pulse">🤖</div>
-            <p className="text-gray-400">Chargement des agents...</p>
+            <p className="text-gray-400">{locale === 'en' ? 'Loading agents...' : locale === 'de' ? 'Agenten werden geladen...' : 'Chargement des agents...'}</p>
           </div>
         </div>
       </PageLayout>
@@ -2025,7 +2025,7 @@ export default function AgentsPage() {
           <div>
             <h1 className="text-2xl font-bold">🤖 Agents</h1>
             <p className="text-sm text-gray-400 mt-1">
-              Crée et gère tes agents IA spécialisés
+              {locale === 'en' ? 'Create and manage your specialized AI agents' : locale === 'de' ? 'Erstelle und verwalte deine spezialisierten KI-Agenten' : 'Crée et gère tes agents IA spécialisés'}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -2047,8 +2047,8 @@ export default function AgentsPage() {
                   );
                 } else {
                   if (confirm(limits.plan === 'free'
-                    ? 'Le plan gratuit est limité à 3 agents. Voir les plans ?'
-                    : `Limite de ${limits.agentLimit} agents atteinte. Voir les plans ?`
+                    ? (locale === 'en' ? 'The free plan is limited to 3 agents. View plans?' : locale === 'de' ? 'Der Free-Plan ist auf 3 Agenten begrenzt. Pläne ansehen?' : 'Le plan gratuit est limité à 3 agents. Voir les plans ?')
+                    : (locale === 'en' ? `Limit of ${limits.agentLimit} agents reached. View plans?` : locale === 'de' ? `Limit von ${limits.agentLimit} Agenten erreicht. Pläne ansehen?` : `Limite de ${limits.agentLimit} agents atteinte. Voir les plans ?`)
                   )) window.location.href = '/pricing';
                 }
                 return;
@@ -2059,13 +2059,13 @@ export default function AgentsPage() {
               limits?.atLimit ? 'bg-gray-600 hover:bg-gray-500' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            <span>+</span> Nouvel Agent
+            <span>+</span> {locale === 'en' ? 'New Agent' : locale === 'de' ? 'Neuer Agent' : 'Nouvel Agent'}
           </button>
           <Link
             href="/companion"
             className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center gap-2 text-sm"
           >
-            🔗 Ouvrir Companion
+            {locale === 'en' ? '🔗 Open Companion' : locale === 'de' ? '🔗 Companion öffnen' : '🔗 Ouvrir Companion'}
           </Link>
           </div>
         </div>
@@ -2161,7 +2161,7 @@ export default function AgentsPage() {
                 <span className="animate-spin">⟳</span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-blue-100">Sync avec votre environnement local</p>
+                <p className="text-sm font-medium text-blue-100">{locale === 'en' ? 'Sync with your local environment' : locale === 'de' ? 'Synchronisierung mit deiner lokalen Umgebung' : 'Sync avec votre environnement local'}</p>
                 <p className="mt-1 text-xs text-blue-200/80">{environmentSyncLabel}</p>
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-950/60">
                   <div className="h-full w-1/3 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-blue-400/80" />
@@ -2198,11 +2198,11 @@ export default function AgentsPage() {
           <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-xl p-4 border border-purple-500/30">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-400">Coût total ce mois (tous agents)</p>
+                <p className="text-sm text-gray-400">{locale === 'en' ? 'Total cost this month (all agents)' : locale === 'de' ? 'Gesamtkosten diesen Monat (alle Agenten)' : 'Coût total ce mois (tous agents)'}</p>
                 <p className="text-3xl font-bold text-white">{formatCost(isDemo ? 3.42 : usageCosts.thisMonth.cost)}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-400">Aujourd'hui</p>
+                <p className="text-sm text-gray-400">{locale === 'en' ? 'Today' : locale === 'de' ? 'Heute' : 'Aujourd\'hui'}</p>
                 <p className="text-xl font-bold text-blue-400">{formatCost(isDemo ? 0.85 : usageCosts.today.cost)}</p>
               </div>
             </div>
@@ -2234,7 +2234,7 @@ export default function AgentsPage() {
             style={{ borderLeftColor: '#8B5CF6', borderLeftWidth: 4 }}
           >
             <div className="absolute top-2 right-2 px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs">
-              Agent principal
+              {locale === 'en' ? 'Main agent' : locale === 'de' ? 'Hauptagent' : 'Agent principal'}
             </div>
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -2247,7 +2247,7 @@ export default function AgentsPage() {
               <div className="flex flex-col items-end gap-2">
                 {mainAgent && (
                   <div className={`px-2 py-0.5 rounded text-xs ${mainAgent.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-600/20 text-red-300'}`}>
-                    {mainAgent.isActive ? 'Actif' : 'Désactivé'}
+                    {mainAgent.isActive ? (locale === 'en' ? 'Active' : locale === 'de' ? 'Aktiv' : 'Actif') : (locale === 'en' ? 'Disabled' : locale === 'de' ? 'Deaktiviert' : 'Désactivé')}
                   </div>
                 )}
                 {showMainSyncBadge && <AgentSyncBadge state={mainSyncState} />}
@@ -2255,7 +2255,7 @@ export default function AgentsPage() {
             </div>
 
             <p className="text-sm text-gray-400 mb-3">
-              Agent principal avec accès complet aux outils OpenClaw
+              {locale === 'en' ? 'Main agent with full access to OpenClaw tools' : locale === 'de' ? 'Hauptagent mit vollem Zugriff auf OpenClaw-Werkzeuge' : 'Agent principal avec accès complet aux outils OpenClaw'}
             </p>
 
             {mainGovernance && (
@@ -2294,7 +2294,7 @@ export default function AgentsPage() {
                 <p className="text-sm font-semibold text-white">{formatCost(getMainAgentCost())}</p>
               </div>
               <div className="bg-gray-700/50 rounded p-2">
-                <p className="text-xs text-gray-400">Budget</p>
+                <p className="text-xs text-gray-400">{locale === 'en' ? 'Budget' : locale === 'de' ? 'Budget' : 'Budget'}</p>
                 <p className="text-sm font-semibold text-white">
                   {mainAgent?.budget ? formatCost(mainAgent.budget) : '∞'}
                 </p>
@@ -2307,7 +2307,7 @@ export default function AgentsPage() {
 
             {mainAgent?.disabledReason && !mainAgent.isActive && (
               <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
-                <p className="font-medium">{mainStopReason?.title || 'Agent désactivé'}</p>
+                <p className="font-medium">{mainStopReason?.title || (locale === 'en' ? 'Agent disabled' : locale === 'de' ? 'Agent deaktiviert' : 'Agent désactivé')}</p>
                 <p className="mt-1">{mainStopReason?.detail || mainAgent.disabledReason}</p>
                 {mainStopReason?.thresholds && (
                   <div className="mt-2 space-y-1 text-red-100/80">
@@ -2326,7 +2326,7 @@ export default function AgentsPage() {
                   onClick={() => isDemo ? demoGate.requireAuth('modifier un agent') : openEditModal(mainAgent)}
                   className="min-w-[8.5rem] flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
                 >
-                  ✏️ Modifier
+                  {locale === 'en' ? '✏️ Edit' : locale === 'de' ? '✏️ Bearbeiten' : '✏️ Modifier'}
                 </button>
               )}
               {mainAgent && (
@@ -2349,22 +2349,22 @@ export default function AgentsPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      {mainAgent.isActive ? 'Désactivation...' : 'Activation...'}
+                      {mainAgent.isActive ? (locale === 'en' ? 'Disabling...' : locale === 'de' ? 'Deaktivierung...' : 'Désactivation...') : (locale === 'en' ? 'Enabling...' : locale === 'de' ? 'Aktivierung...' : 'Activation...')}
                     </span>
-                  ) : mainAgent.isActive ? '⏸️ Désactiver' : '▶️ Activer'}
+                  ) : mainAgent.isActive ? (locale === 'en' ? '⏸️ Disable' : locale === 'de' ? '⏸️ Deaktivieren' : '⏸️ Désactiver') : (locale === 'en' ? '▶️ Enable' : locale === 'de' ? '▶️ Aktivieren' : '▶️ Activer')}
                 </button>
               )}
               <button
                 onClick={() => isDemo ? demoGate.requireAuth('voir les fichiers') : setWorkspaceModal({ agentId: 'main', agentName: `${mainAgentEmoji} ${mainAgentName}` })}
                 className="min-w-[8.5rem] flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
               >
-                📁 Fichiers
+                {locale === 'en' ? '📁 Files' : locale === 'de' ? '📁 Dateien' : '📁 Fichiers'}
               </button>
               <button
                 onClick={() => isDemo ? demoGate.requireAuth('gérer les skills') : setSkillsModal({ agentId: 'global', agentName: `🌍 Global Skills` })}
                 className="min-w-[8.5rem] flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
               >
-                🧩 Skills
+                {locale === 'en' ? '🧩 Skills' : locale === 'de' ? '🧩 Skills' : '🧩 Skills'}
               </button>
             </div>
           </div>
@@ -2414,7 +2414,7 @@ export default function AgentsPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <div className={`px-2 py-0.5 rounded text-xs ${agent.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-600/20 text-red-300'}`}>
-                      {agent.isActive ? 'Actif' : 'Désactivé'}
+                      {agent.isActive ? (locale === 'en' ? 'Active' : locale === 'de' ? 'Aktiv' : 'Actif') : (locale === 'en' ? 'Disabled' : locale === 'de' ? 'Deaktiviert' : 'Désactivé')}
                     </div>
                     {showSyncBadge && <AgentSyncBadge state={syncState} />}
                   </div>
@@ -2452,7 +2452,7 @@ export default function AgentsPage() {
 
                 {agent.disabledReason && !agent.isActive && (
                   <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
-                    <p className="font-medium">{stopReason?.title || 'Agent désactivé'}</p>
+                    <p className="font-medium">{stopReason?.title || (locale === 'en' ? 'Agent disabled' : locale === 'de' ? 'Agent deaktiviert' : 'Agent désactivé')}</p>
                     <p className="mt-1">{stopReason?.detail || agent.disabledReason}</p>
                     {stopReason?.thresholds && (
                       <div className="mt-2 space-y-1 text-red-100/80">
@@ -2519,7 +2519,7 @@ export default function AgentsPage() {
                     </span>
                   )}
                   {agent.channels.length === 0 && (
-                    <span className="text-xs text-gray-500 italic">Aucun channel</span>
+                    <span className="text-xs text-gray-500 italic">{locale === 'en' ? 'No channel' : locale === 'de' ? 'Kein Channel' : 'Aucun channel'}</span>
                   )}
                 </div>
 
@@ -2542,7 +2542,7 @@ export default function AgentsPage() {
                     onClick={() => isDemo ? demoGate.requireAuth('modifier un agent') : openEditModal(agent)}
                     className="min-w-[8.5rem] flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
                   >
-                    ✏️ Modifier
+                    {locale === 'en' ? '✏️ Edit' : locale === 'de' ? '✏️ Bearbeiten' : '✏️ Modifier'}
                   </button>
                   <button
                     onClick={() =>
@@ -2563,9 +2563,9 @@ export default function AgentsPage() {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
-                        {agent.isActive ? 'Désactivation...' : 'Activation...'}
+                        {agent.isActive ? (locale === 'en' ? 'Disabling...' : locale === 'de' ? 'Deaktivierung...' : 'Désactivation...') : (locale === 'en' ? 'Enabling...' : locale === 'de' ? 'Aktivierung...' : 'Activation...')}
                       </span>
-                    ) : agent.isActive ? '⏸️ Désactiver' : '▶️ Activer'}
+                    ) : agent.isActive ? (locale === 'en' ? '⏸️ Disable' : locale === 'de' ? '⏸️ Deaktivieren' : '⏸️ Désactiver') : (locale === 'en' ? '▶️ Enable' : locale === 'de' ? '▶️ Aktivieren' : '▶️ Activer')}
                   </button>
                   {agent.openclawAgentId && (
                     <>
@@ -2611,22 +2611,22 @@ export default function AgentsPage() {
         >
           <div className="bg-gray-800 rounded-2xl max-w-lg w-full p-6 border border-gray-700" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-white">📥 Import manuel</h3>
+              <h3 className="text-lg font-bold text-white">{locale === 'en' ? '📥 Manual import' : locale === 'de' ? '📥 Manueller Import' : '📥 Import manuel'}</h3>
               <button onClick={() => setShowImportFallback(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
             </div>
             
             {importError && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-4">
-                <p className="text-red-400 text-sm font-medium">⚠️ Le scan automatique a échoué</p>
+                <p className="text-red-400 text-sm font-medium">{locale === 'en' ? '⚠️ Automatic scan failed' : locale === 'de' ? '⚠️ Automatischer Scan fehlgeschlagen' : '⚠️ Le scan automatique a échoué'}</p>
                 <p className="text-red-400/70 text-xs mt-1">{importError}</p>
               </div>
             )}
 
             <p className="text-gray-300 text-sm mb-3">
-              Colle le contenu de ton fichier <code className="bg-gray-700 px-1.5 py-0.5 rounded text-xs text-blue-400">~/.openclaw/openclaw.json</code> ci-dessous.
+              {locale === 'en' ? <>Paste the content of your <code className="bg-gray-700 px-1.5 py-0.5 rounded text-xs text-blue-400">~/.openclaw/openclaw.json</code> file below.</> : locale === 'de' ? <>Füge den Inhalt deiner <code className="bg-gray-700 px-1.5 py-0.5 rounded text-xs text-blue-400">~/.openclaw/openclaw.json</code>-Datei unten ein.</> : <>Colle le contenu de ton fichier <code className="bg-gray-700 px-1.5 py-0.5 rounded text-xs text-blue-400">~/.openclaw/openclaw.json</code> ci-dessous.</>}
             </p>
             <p className="text-gray-500 text-xs mb-4">
-              Tu peux l&apos;obtenir avec : <code className="bg-gray-700 px-1.5 py-0.5 rounded">cat ~/.openclaw/openclaw.json</code>
+              {locale === 'en' ? <>You can get it with: <code className="bg-gray-700 px-1.5 py-0.5 rounded">cat ~/.openclaw/openclaw.json</code></> : locale === 'de' ? <>Du kannst sie so abrufen: <code className="bg-gray-700 px-1.5 py-0.5 rounded">cat ~/.openclaw/openclaw.json</code></> : <>Tu peux l&apos;obtenir avec : <code className="bg-gray-700 px-1.5 py-0.5 rounded">cat ~/.openclaw/openclaw.json</code></>}
             </p>
 
             <textarea
@@ -2637,7 +2637,7 @@ export default function AgentsPage() {
             />
 
             <p className="text-gray-500 text-xs mt-3 mb-4">
-              💡 Notre équipe analysera ta config et te contactera sous 24h pour finaliser l&apos;import si nécessaire.
+              {locale === 'en' ? '💡 Our team will review your config and contact you within 24h if a manual follow-up is needed.' : locale === 'de' ? '💡 Unser Team prüft deine Konfiguration und kontaktiert dich innerhalb von 24 Stunden, falls eine manuelle Nachbearbeitung nötig ist.' : '💡 Notre équipe analysera ta config et te contactera sous 24h pour finaliser l&apos;import si nécessaire.'}
             </p>
 
             <div className="flex gap-3">
@@ -2646,13 +2646,13 @@ export default function AgentsPage() {
                 disabled={!importFallbackConfig.trim() || importLoading}
                 className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white font-medium py-2.5 rounded-lg transition-colors"
               >
-                {importLoading ? '⏳ Envoi...' : '📤 Envoyer la config'}
+                {importLoading ? (locale === 'en' ? '⏳ Sending...' : locale === 'de' ? '⏳ Senden...' : '⏳ Envoi...') : (locale === 'en' ? '📤 Send config' : locale === 'de' ? '📤 Konfiguration senden' : '📤 Envoyer la config')}
               </button>
               <button
                 onClick={() => setShowImportFallback(false)}
                 className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
               >
-                Annuler
+                {locale === 'en' ? 'Cancel' : locale === 'de' ? 'Abbrechen' : 'Annuler'}
               </button>
             </div>
           </div>
@@ -2687,9 +2687,9 @@ export default function AgentsPage() {
                   />
                 </svg>
                 <div>
-                  <div className="text-lg font-semibold text-white">Création de l&apos;agent</div>
+                  <div className="text-lg font-semibold text-white">{locale === 'en' ? 'Creating agent' : locale === 'de' ? 'Agent wird erstellt' : 'Création de l&apos;agent'}</div>
                   <div className="mt-2 text-sm text-gray-300">
-                    EkyBot crée l&apos;agent puis prépare automatiquement Companion. Merci de patienter quelques secondes.
+                    {locale === 'en' ? 'EkyBot is creating the agent and automatically preparing Companion. Please wait a few seconds.' : locale === 'de' ? 'EkyBot erstellt den Agenten und bereitet Companion automatisch vor. Bitte warte ein paar Sekunden.' : 'EkyBot crée l&apos;agent puis prépare automatiquement Companion. Merci de patienter quelques secondes.'}
                   </div>
                 </div>
                 {provisionStatus && (
@@ -2701,7 +2701,7 @@ export default function AgentsPage() {
             )}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
               <h2 className="text-lg font-semibold text-white">
-                {editingAgent ? '✏️ Modifier l\'agent' : '➕ Nouvel Agent'}
+                {editingAgent ? (locale === 'en' ? '✏️ Edit agent' : locale === 'de' ? '✏️ Agent bearbeiten' : '✏️ Modifier l\'agent') : (locale === 'en' ? '➕ New Agent' : locale === 'de' ? '➕ Neuer Agent' : '➕ Nouvel Agent')}
               </h2>
               <div className="flex items-center gap-2">
                 {/* Alternative Save button in header for mobile */}
@@ -2770,7 +2770,7 @@ export default function AgentsPage() {
               {/* Name & Icon */}
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-white mb-1">Nom *</label>
+                  <label className="block text-sm font-medium text-white mb-1">{locale === 'en' ? 'Name *' : locale === 'de' ? 'Name *' : 'Nom *'}</label>
                   <input
                     type="text"
                     value={formData.name}
@@ -2781,7 +2781,7 @@ export default function AgentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Icône</label>
+                  <label className="block text-sm font-medium text-white mb-1">{locale === 'en' ? 'Icon' : locale === 'de' ? 'Icon' : 'Icône'}</label>
                   <div className="flex gap-1 flex-wrap max-w-[120px]">
                     {ICONS.slice(0, 6).map((icon) => (
                       <button
@@ -2802,12 +2802,12 @@ export default function AgentsPage() {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-white mb-1">Description</label>
+                <label className="block text-sm font-medium text-white mb-1">{locale === 'en' ? 'Description' : locale === 'de' ? 'Beschreibung' : 'Description'}</label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Ex: Gestion des réseaux sociaux et marketing"
+                  placeholder={locale === 'en' ? 'E.g.: Social media management and marketing' : locale === 'de' ? 'Z. B.: Social-Media-Management und Marketing' : 'Ex: Gestion des réseaux sociaux et marketing'}
                   disabled={isSubmitting}
                   className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 />
@@ -2816,7 +2816,7 @@ export default function AgentsPage() {
               {/* Model */}
               <div>
                 <label className="block text-sm font-medium text-white mb-1">
-                  Modèle
+                  {locale === 'en' ? 'Model' : locale === 'de' ? 'Modell' : 'Modèle'}
                   {modelsLoading && <span className="ml-2 text-gray-400 text-xs">(chargement...)</span>}
                 </label>
                 <select
@@ -2833,7 +2833,7 @@ export default function AgentsPage() {
                   disabled={availableModels.length === 0 || modelsLoading || isSubmitting}
                 >
                   {availableModels.length === 0 ? (
-                    <option value="">Aucun provider configuré</option>
+                    <option value="">{locale === 'en' ? 'No provider configured' : locale === 'de' ? 'Kein Provider konfiguriert' : 'Aucun provider configuré'}</option>
                   ) : (
                     availableModels.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -2844,15 +2844,15 @@ export default function AgentsPage() {
                 </select>
                 {dynamicModels.length > 0 && (
                   <p className="mt-1 text-xs text-gray-500">
-                    💰 Prix affichés quand disponibles. Certains providers comme Ollama Cloud ne publient pas ici de pricing par 1K.
+                    {locale === 'en' ? '💰 Prices are shown when available. Some providers such as Ollama Cloud do not publish per-1K pricing here.' : locale === 'de' ? '💰 Preise werden angezeigt, wenn verfügbar. Einige Anbieter wie Ollama Cloud veröffentlichen hier keine Preise pro 1K.' : '💰 Prix affichés quand disponibles. Certains providers comme Ollama Cloud ne publient pas ici de pricing par 1K.'}
                   </p>
                 )}
                 {availableModels.length === 0 && !hasGateway && (
                   <p className="mt-1 text-xs text-amber-400">
                     <Link href="/settings/api-keys" className="underline hover:text-amber-300">
-                      Configure tes clés API
+                      {locale === 'en' ? 'Configure your API keys' : locale === 'de' ? 'API-Schlüssel konfigurieren' : 'Configure tes clés API'}
                     </Link>
-                    {' '}ou connecte ton gateway OpenClaw pour débloquer les modèles.
+                    {' '}{locale === 'en' ? 'or connect your OpenClaw gateway to unlock models.' : locale === 'de' ? 'oder verbinde dein OpenClaw-Gateway, um Modelle freizuschalten.' : 'ou connecte ton gateway OpenClaw pour débloquer les modèles.'}
                   </p>
                 )}
               </div>
@@ -2861,8 +2861,7 @@ export default function AgentsPage() {
               {!editingAgent && (
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
                   <p className="text-blue-200 text-xs">
-                    💡 L'agent aura automatiquement son propre workspace avec sa personnalité (IDENTITY.md), 
-                    sa mémoire (MEMORY.md) et accès aux outils OpenClaw.
+                    {locale === 'en' ? '💡 The agent will automatically get its own workspace with its personality (IDENTITY.md), memory (MEMORY.md), and OpenClaw tool access.' : locale === 'de' ? '💡 Der Agent erhält automatisch seinen eigenen Workspace mit Persönlichkeit (IDENTITY.md), Speicher (MEMORY.md) und Zugriff auf OpenClaw-Werkzeuge.' : '💡 L\'agent aura automatiquement son propre workspace avec sa personnalité (IDENTITY.md), sa mémoire (MEMORY.md) et accès aux outils OpenClaw.'}
                   </p>
                 </div>
               )}
@@ -2905,7 +2904,7 @@ export default function AgentsPage() {
                   </div>
                 )}
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">Priorité</label>
+                  <label className="block text-sm font-medium text-white mb-1">{locale === 'en' ? 'Priority' : locale === 'de' ? 'Priorität' : 'Priorité'}</label>
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
@@ -2925,14 +2924,14 @@ export default function AgentsPage() {
                 
                 {/* Project */}
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1">📁 Projet</label>
+                  <label className="block text-sm font-medium text-white mb-1">{locale === 'en' ? '📁 Project' : locale === 'de' ? '📁 Projekt' : '📁 Projet'}</label>
                   <select
                     value={formData.projectId}
                     onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
                     disabled={isSubmitting}
                     className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <option value="">-- Sélectionner un projet --</option>
+                    <option value="">{locale === 'en' ? '-- Select a project --' : locale === 'de' ? '-- Projekt auswählen --' : '-- Sélectionner un projet --'}</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.icon || '📁'} {p.name}
@@ -2940,7 +2939,7 @@ export default function AgentsPage() {
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    Regroupe les coûts, la mémoire et les activités par projet.
+                    {locale === 'en' ? 'Groups costs, memory, and activities by project.' : locale === 'de' ? 'Gruppiert Kosten, Speicher und Aktivitäten nach Projekt.' : 'Regroupe les coûts, la mémoire et les activités par projet.'}
                   </p>
                 </div>
 
@@ -2957,16 +2956,16 @@ export default function AgentsPage() {
                         disabled={isSubmitting}
                         className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <option value="">-- Channel existant --</option>
+                        <option value="">{locale === 'en' ? '-- Existing channel --' : locale === 'de' ? '-- Vorhandener Channel --' : '-- Channel existant --'}</option>
                         {channels.map((ch) => (
                           <option key={ch.key} value={ch.key}>
-                            #{ch.name || ch.key}{ch.agentId ? ' (déjà assigné)' : ''}
+                            #{ch.name || ch.key}{ch.agentId ? (locale === 'en' ? ' (already assigned)' : locale === 'de' ? ' (bereits zugewiesen)' : ' (déjà assigné)') : ''}
                           </option>
                         ))}
                       </select>
                       
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">ou créer :</span>
+                        <span className="text-xs text-gray-500">{locale === 'en' ? 'or create:' : locale === 'de' ? 'oder erstellen:' : 'ou créer :'}</span>
                         <input
                           type="text"
                           value={formData.newChannelName}
@@ -2986,7 +2985,7 @@ export default function AgentsPage() {
 
               {/* Color */}
               <div>
-                <label className="block text-sm font-medium text-white mb-1">Couleur</label>
+                <label className="block text-sm font-medium text-white mb-1">{locale === 'en' ? 'Color' : locale === 'de' ? 'Farbe' : 'Couleur'}</label>
                 <div className="flex gap-2">
                   {COLORS.map((color) => (
                     <button

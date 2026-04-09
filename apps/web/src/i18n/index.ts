@@ -7,7 +7,7 @@ import de from './de.yaml';
 
 export type Locale = 'fr' | 'en' | 'de';
 
-export const locales: Locale[] = ['fr', 'en', 'de'];
+export const locales: Locale[] = ['en', 'fr', 'de'];
 
 export const localeNames: Record<Locale, string> = {
   fr: 'Français',
@@ -28,7 +28,7 @@ const translations: Record<Locale, typeof fr> = {
 };
 
 export function getTranslations(locale: Locale) {
-  return translations[locale] || translations.fr;
+  return translations[locale] || translations.en;
 }
 
 // Helper to get nested translation by dot notation
@@ -48,4 +48,4 @@ export function t(translations: Record<string, unknown>, key: string): string {
   return typeof value === 'string' ? value : key;
 }
 
-export const defaultLocale: Locale = 'fr';
+export const defaultLocale: Locale = 'en';
