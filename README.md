@@ -11,7 +11,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green?logo=supabase)
-![License](https://img.shields.io/badge/License-AGPL--3.0-purple)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ## 📸 Screenshots
 
@@ -155,7 +155,7 @@ Native iOS and Android apps are available via Capacitor but are **not included**
 
 ## 📄 License
 
-This project is licensed under the **AGPL-3.0 License** — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
 **TL;DR:** You can use, modify, and self-host EkyBot freely. If you deploy a modified version as a service, you must share your changes under the same license.
 
