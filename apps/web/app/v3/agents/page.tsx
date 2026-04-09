@@ -555,13 +555,13 @@ function WorkspaceFilesModal({
                     disabled={isSaving}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg text-sm"
                   >
-                    {isSaving ? '⏳ Sauvegarde...' : '💾 Sauvegarder'}
+                    {isSaving ? (locale === 'en' ? '⏳ Saving...' : locale === 'de' ? '⏳ Speichern...' : '⏳ Sauvegarde...') : (locale === 'en' ? '💾 Save' : locale === 'de' ? '💾 Speichern' : '💾 Sauvegarder')}
                   </button>
                 </div>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-500">
-                Sélectionne un fichier à gauche
+                {locale === 'en' ? 'Select a file on the left' : locale === 'de' ? 'Wähle links eine Datei aus' : 'Sélectionne un fichier à gauche'}
               </div>
             )}
           </div>
@@ -1713,7 +1713,7 @@ export default function AgentsPage() {
     setIsSubmitting(false);
     setActionMessage({
       type: 'success',
-      text: '💾 Sauvegarde prise en compte. Synchronisation en arrière-plan.',
+      text: locale === 'en' ? '💾 Changes saved. Sync running in the background.' : locale === 'de' ? '💾 Änderungen gespeichert. Synchronisierung läuft im Hintergrund.' : '💾 Sauvegarde prise en compte. Synchronisation en arrière-plan.',
     });
     logAgentsPerf('save-close-modal', {
       agentId: agentBeforeSave.id,
@@ -1927,7 +1927,7 @@ export default function AgentsPage() {
   };
 
   const handleDisconnectCompanion = async (agent: Agent) => {
-    if (!confirm(`Dissocier ${agent.name} de Companion ? L'agent restera dans EkyBot mais ne sera plus géré localement par Companion.`)) {
+    if (!confirm(locale === 'en' ? `Disconnect ${agent.name} from Companion? The agent will stay in EkyBot but will no longer be managed locally by Companion.` : locale === 'de' ? `${agent.name} von Companion trennen? Der Agent bleibt in EkyBot, wird aber nicht mehr lokal von Companion verwaltet.` : `Dissocier ${agent.name} de Companion ? L'agent restera dans EkyBot mais ne sera plus géré localement par Companion.`)) {
       return;
     }
 
@@ -2290,7 +2290,7 @@ export default function AgentsPage() {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-2 mb-3">
               <div className="bg-gray-700/50 rounded p-2">
-                <p className="text-xs text-gray-400">Ce mois</p>
+                <p className="text-xs text-gray-400">{locale === 'en' ? 'This month' : locale === 'de' ? 'Diesen Monat' : 'Ce mois'}</p>
                 <p className="text-sm font-semibold text-white">{formatCost(getMainAgentCost())}</p>
               </div>
               <div className="bg-gray-700/50 rounded p-2">
@@ -2300,8 +2300,8 @@ export default function AgentsPage() {
                 </p>
               </div>
               <div className="bg-gray-700/50 rounded p-2">
-                <p className="text-xs text-gray-400">Outils</p>
-                <p className="text-sm font-semibold text-white">✓ Complets</p>
+                <p className="text-xs text-gray-400">{locale === 'en' ? 'Tools' : locale === 'de' ? 'Tools' : 'Outils'}</p>
+                <p className="text-sm font-semibold text-white">{locale === 'en' ? '✓ Full access' : locale === 'de' ? '✓ Vollzugriff' : '✓ Complets'}</p>
               </div>
             </div>
 
@@ -2468,8 +2468,8 @@ export default function AgentsPage() {
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div className="bg-gray-700/50 rounded p-2">
                     <p className="text-xs text-gray-400 flex items-center gap-1">
-                      Ce mois
-                      <span title="Estimation basée sur les tokens échangés" className="cursor-help text-gray-500">ⓘ</span>
+                      {locale === 'en' ? 'This month' : locale === 'de' ? 'Diesen Monat' : 'Ce mois'}
+                      <span title={locale === 'en' ? 'Estimate based on exchanged tokens' : locale === 'de' ? 'Schätzung basierend auf ausgetauschten Tokens' : 'Estimation basée sur les tokens échangés'} className="cursor-help text-gray-500">ⓘ</span>
                     </p>
                     <p className="text-sm font-semibold text-white">{formatCost(getAgentCost(agent.id, agent.openclawAgentId))}</p>
                   </div>
@@ -2535,7 +2535,7 @@ export default function AgentsPage() {
                       disabled={unlinkingAgentIds.includes(agent.id)}
                       className="min-w-[8.5rem] px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded text-sm disabled:opacity-50"
                     >
-                      {unlinkingAgentIds.includes(agent.id) ? 'Dissociation...' : 'Dissocier'}
+                      {unlinkingAgentIds.includes(agent.id) ? (locale === 'en' ? 'Disconnecting...' : locale === 'de' ? 'Wird getrennt...' : 'Dissociation...') : (locale === 'en' ? 'Disconnect' : locale === 'de' ? 'Trennen' : 'Dissocier')}
                     </button>
                   )}
                   <button

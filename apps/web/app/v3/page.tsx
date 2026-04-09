@@ -1685,13 +1685,13 @@ function ChatV3Content() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(data?.error || 'Impossible de sauvegarder le binding Codex');
+        throw new Error(data?.error || (locale === 'en' ? 'Unable to save Codex binding' : locale === 'de' ? 'Codex-Binding konnte nicht gespeichert werden' : 'Impossible de sauvegarder le binding Codex'));
       }
       setCodexContext(data?.context || null);
       setCodexBindingEditing(false);
-      showToast('Binding Codex sauvegardé.', 'success');
+      showToast(locale === 'en' ? 'Codex binding saved.' : locale === 'de' ? 'Codex-Binding gespeichert.' : 'Binding Codex sauvegardé.', 'success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de sauvegarder le binding Codex';
+      const message = error instanceof Error ? error.message : (locale === 'en' ? 'Unable to save Codex binding' : locale === 'de' ? 'Codex-Binding konnte nicht gespeichert werden' : 'Impossible de sauvegarder le binding Codex');
       setCodexContextError(message);
       showToast(message, 'error');
     } finally {
@@ -3312,7 +3312,7 @@ function ChatV3Content() {
         content,
         timestamp: Date.now(),
         authorType: 'system',
-        authorName: '⚙️ Système',
+        authorName: locale === 'en' ? '⚙️ System' : locale === 'de' ? '⚙️ System' : '⚙️ Système',
         pendingServerSync: true,
       };
 
@@ -3442,7 +3442,7 @@ function ChatV3Content() {
     const normalizeAgentErrorMessage = (rawMessage?: string) => {
       const message = (rawMessage || '').trim();
       if (!message) {
-        return '❌ Le service de communication avec l’agent est momentanément indisponible. Réessaie dans un instant.';
+        return locale === 'en' ? '❌ The agent communication service is temporarily unavailable. Please try again in a moment.' : locale === 'de' ? '❌ Der Kommunikationsdienst des Agenten ist vorübergehend nicht verfügbar. Bitte versuche es gleich erneut.' : '❌ Le service de communication avec l’agent est momentanément indisponible. Réessaie dans un instant.';
       }
       if (
         message.startsWith('❌') ||
@@ -3480,11 +3480,11 @@ function ChatV3Content() {
         normalized.includes('503') ||
         normalized.includes('504')
       ) {
-        return '⚠️ Le service de communication avec l’agent est temporairement indisponible. Réessaie dans un instant.';
+        return locale === 'en' ? '⚠️ The agent communication service is temporarily unavailable. Please try again in a moment.' : locale === 'de' ? '⚠️ Der Kommunikationsdienst des Agenten ist vorübergehend nicht verfügbar. Bitte versuche es gleich erneut.' : '⚠️ Le service de communication avec l’agent est temporairement indisponible. Réessaie dans un instant.';
       }
 
       if (normalized.includes('agent indisponible')) {
-        return '⚠️ L’agent est momentanément indisponible. Réessaie dans un instant.';
+        return locale === 'en' ? '⚠️ The agent is temporarily unavailable. Please try again in a moment.' : locale === 'de' ? '⚠️ Der Agent ist vorübergehend nicht verfügbar. Bitte versuche es gleich erneut.' : '⚠️ L’agent est momentanément indisponible. Réessaie dans un instant.';
       }
 
       return `❌ ${message}`;
@@ -3502,9 +3502,9 @@ function ChatV3Content() {
       setLoadingChannels(prev => new Set(prev).add(targetChannelKey));
       setTimeout(() => {
         const responses = [
-          "Je suis en mode démonstration. Dans la version complète, je serais connecté à ton agent OpenClaw et pourrais effectuer des actions réelles ! 🚀",
-          "C'est une excellente question ! En mode normal, j'aurais accès à toutes les fonctionnalités de ton agent OpenClaw.",
-          "Bien reçu ! 👍 En production, ton message serait traité par ton assistant personnel.",
+          locale === 'en' ? "I'm in demo mode. In the full version, I would be connected to your OpenClaw agent and could perform real actions. 🚀" : locale === 'de' ? "Ich bin im Demo-Modus. In der Vollversion wäre ich mit deinem OpenClaw-Agenten verbunden und könnte echte Aktionen ausführen. 🚀" : "Je suis en mode démonstration. Dans la version complète, je serais connecté à ton agent OpenClaw et pourrais effectuer des actions réelles ! 🚀",
+          locale === 'en' ? "Great question. In normal mode, I would have access to all the capabilities of your OpenClaw agent." : locale === 'de' ? "Gute Frage. Im normalen Modus hätte ich Zugriff auf alle Funktionen deines OpenClaw-Agenten." : "C'est une excellente question ! En mode normal, j'aurais accès à toutes les fonctionnalités de ton agent OpenClaw.",
+          locale === 'en' ? "Got it. In production, your message would be handled by your personal assistant." : locale === 'de' ? "Verstanden. In der Produktion würde deine Nachricht von deinem persönlichen Assistenten verarbeitet." : "Bien reçu ! 👍 En production, ton message serait traité par ton assistant personnel.",
         ];
         const assistantMsg: Message = { 
           id: `demo-assistant-${Date.now()}`, 
@@ -3686,7 +3686,7 @@ function ChatV3Content() {
       
       // Add reply context if present
       if (messageReplyTo) {
-        const replyContext = `↩️ En réponse à (${messageReplyTo.role === 'assistant' ? agentName : 'moi'}):\n"${messageReplyTo.content}"\n\n`;
+        const replyContext = `↩️ ${locale === 'en' ? 'Replying to' : locale === 'de' ? 'Antwort auf' : 'En réponse à'} (${messageReplyTo.role === 'assistant' ? agentName : locale === 'en' ? 'me' : locale === 'de' ? 'mich' : 'moi'}):\n"${messageReplyTo.content}"\n\n`;
         finalMessageContent = replyContext + finalMessageContent;
       }
       
@@ -3912,7 +3912,7 @@ function ChatV3Content() {
                     content: pendingMessageContent,
                     timestamp: Date.now(),
                     authorType: 'system',
-                    authorName: '⚙️ Système',
+                    authorName: locale === 'en' ? '⚙️ System' : locale === 'de' ? '⚙️ System' : '⚙️ Système',
                     synced: true,
                     pendingServerSync: true,
                   },
@@ -3937,7 +3937,7 @@ function ChatV3Content() {
                     content: queueInfo.systemMessageContent,
                     timestamp: Date.now(),
                     authorType: 'system',
-                    authorName: '⚙️ Système',
+                    authorName: locale === 'en' ? '⚙️ System' : locale === 'de' ? '⚙️ System' : '⚙️ Système',
                     synced: true,
                     pendingServerSync: true,
                   },
@@ -3991,7 +3991,7 @@ function ChatV3Content() {
 
         // Legacy busy-queue fallback
         setError({
-          message: `⏳ Agent occupé - Message en file d'attente (position ${queueInfo.position || '?'})`,
+          message: locale === 'en' ? `⏳ Agent busy - Message queued (position ${queueInfo.position || '?'})` : locale === 'de' ? `⏳ Agent beschäftigt - Nachricht in Warteschlange (Position ${queueInfo.position || '?'})` : `⏳ Agent occupé - Message en file d'attente (position ${queueInfo.position || '?'})`,
           isWarning: true
         });
 
@@ -4026,18 +4026,18 @@ function ChatV3Content() {
             // HTML error page from Cloudflare/proxy — never show raw HTML
             const statusMessages: Record<number, string> = {
               524: locale === 'en' ? 'Timeout — the server took too long to respond' : locale === 'de' ? 'Timeout — der Server hat zu lange zum Antworten gebraucht' : 'Timeout — le serveur a mis trop longtemps à répondre',
-              502: 'Gateway indisponible',
-              503: 'Service temporairement indisponible',
+              502: locale === 'en' ? 'Gateway unavailable' : locale === 'de' ? 'Gateway nicht verfügbar' : 'Gateway indisponible',
+              503: locale === 'en' ? 'Service temporarily unavailable' : locale === 'de' ? 'Dienst vorübergehend nicht verfügbar' : 'Service temporairement indisponible',
               504: 'Timeout gateway',
             };
-            err = { error: statusMessages[response.status] || `Erreur serveur (${response.status})` };
+            err = { error: statusMessages[response.status] || (locale === 'en' ? `Server error (${response.status})` : locale === 'de' ? `Serverfehler (${response.status})` : `Erreur serveur (${response.status})`) };
             console.error(`[Chat] HTML error page (${response.status}) — Cloudflare/proxy error`);
           } else {
             err = JSON.parse(rawText);
           }
         } catch { /* already has default err */ }
         console.error(`[Chat] Error response (${response.status}):`, err.error);
-        throw new Error(err.error || `Erreur serveur (${response.status})`);
+        throw new Error(err.error || (locale === 'en' ? `Server error (${response.status})` : locale === 'de' ? `Serverfehler (${response.status})` : `Erreur serveur (${response.status})`));
       }
       
       const contentType = response.headers.get('content-type') || '';
@@ -4878,7 +4878,7 @@ function ChatV3Content() {
                   <button
                     onClick={(e) => { e.stopPropagation(); openChannelEdit(channel.key, channel.name); }}
                     className="text-gray-400 hover:text-white"
-                    title={t('common.edit') || 'Modifier'}
+                    title={t('common.edit') || (locale === 'en' ? 'Edit' : locale === 'de' ? 'Bearbeiten' : 'Modifier')}
                   >
                     ✏️
                   </button>
@@ -5150,7 +5150,7 @@ function ChatV3Content() {
                     onClick={() => setCodexBindingEditing((current) => !current)}
                     className="rounded-md border border-amber-400/30 px-3 py-1 text-xs text-amber-100/80 hover:border-amber-300/60 hover:text-amber-50"
                   >
-                    {codexBindingEditing ? 'Fermer' : 'Edit binding'}
+                    {codexBindingEditing ? (locale === 'en' ? 'Close' : locale === 'de' ? 'Schließen' : 'Fermer') : 'Edit binding'}
                   </button>
                   <Link
                     href="/companion"
@@ -5181,20 +5181,19 @@ function ChatV3Content() {
                       <div className="mt-2 flex items-center justify-between gap-3">
                         <div className="text-xs text-white/45">
                           {selectedCodexProject
-                            ? `La memoire runtime et le contexte Codex suivront le projet ${selectedCodexProject.name}.`
-                            : 'Choisis le projet sur lequel tu veux vraiment travailler depuis EkyBot.'}
+                            ? (locale === 'en' ? `Runtime memory and Codex context will follow project ${selectedCodexProject.name}.` : locale === 'de' ? `Laufzeitspeicher und Codex-Kontext folgen dem Projekt ${selectedCodexProject.name}.` : `La memoire runtime et le contexte Codex suivront le projet ${selectedCodexProject.name}.`)
+                            : (locale === 'en' ? 'Choose the project you really want to work on from EkyBot.' : locale === 'de' ? 'Wähle das Projekt, an dem du wirklich aus EkyBot heraus arbeiten willst.' : 'Choisis le projet sur lequel tu veux vraiment travailler depuis EkyBot.')}
                         </div>
                         <Link
                           href="/projects"
                           className="shrink-0 text-xs text-amber-200/80 hover:text-amber-100"
                         >
-                          Nouveau projet
+                          {locale === 'en' ? 'New project' : locale === 'de' ? 'Neues Projekt' : 'Nouveau projet'}
                         </Link>
                       </div>
                       {codexProjectOptions.length <= 1 && (
                         <div className="mt-2 text-xs text-amber-200/75">
-                          Un seul projet est disponible pour l’instant. Cree un autre projet dans Projects si tu veux
-                          utiliser Codex sur un autre contexte.
+                          {locale === 'en' ? 'Only one project is available right now. Create another project in Projects if you want to use Codex in another context.' : locale === 'de' ? 'Derzeit ist nur ein Projekt verfügbar. Erstelle in Projects ein weiteres Projekt, wenn du Codex in einem anderen Kontext nutzen möchtest.' : 'Un seul projet est disponible pour l’instant. Cree un autre projet dans Projects si tu veux utiliser Codex sur un autre contexte.'}
                         </div>
                       )}
                     </label>
@@ -5241,9 +5240,9 @@ function ChatV3Content() {
                       <div className="mt-2 text-xs text-white/45">
                         {codexProjectId
                           ? codexSelectableAgents.some((agent) => agent.projectId === codexProjectId)
-                            ? 'Agents filtres pour le projet selectionne.'
+                            ? (locale === 'en' ? 'Agents filtered for the selected project.' : locale === 'de' ? 'Agenten für das ausgewählte Projekt gefiltert.' : 'Agents filtres pour le projet selectionne.')
                             : (locale === 'en' ? 'No agent is strictly linked to this project on this machine; showing the machine fallback.' : locale === 'de' ? 'Kein Agent ist auf dieser Maschine strikt mit diesem Projekt verknüpft; Maschinen-Fallback wird angezeigt.' : 'Aucun agent strictement lie a ce projet sur cette machine ; affichage du fallback machine.')}
-                          : 'Choisis un projet pour restreindre plus finement le workspace agent.'}
+                          : (locale === 'en' ? 'Choose a project to narrow the workspace agent more precisely.' : locale === 'de' ? 'Wähle ein Projekt, um den Workspace-Agenten genauer einzugrenzen.' : 'Choisis un projet pour restreindre plus finement le workspace agent.')}
                       </div>
                     </label>
                   </div>
@@ -5289,7 +5288,7 @@ function ChatV3Content() {
                     {codexContext?.memory?.runtimeKeyCount
                       ? `${codexContext.memory.runtimeKeyCount} runtime key(s) · ${
                           formatDateTime(codexContext.memory.lastMemoryUploadedAt || codexContext.memory.latestRuntimeUpdatedAt) ||
-                          'sync inconnue'
+                          locale === 'en' ? 'sync unknown' : locale === 'de' ? 'Sync unbekannt' : 'sync inconnue'
                         }`
                       : (locale === 'en' ? 'Runtime memory will appear after the first Companion sync.' : locale === 'de' ? 'Die Laufzeit-Speicherung erscheint nach der ersten Companion-Synchronisierung.' : 'La mémoire runtime apparaîtra après le premier sync Companion.')}
                   </div>
@@ -5297,7 +5296,7 @@ function ChatV3Content() {
               </div>
 
               {codexContextError && (
-                <div className="mt-3 text-sm text-red-300">Contexte Codex indisponible : {codexContextError}</div>
+                <div className="mt-3 text-sm text-red-300">{locale === 'en' ? 'Codex context unavailable:' : locale === 'de' ? 'Codex-Kontext nicht verfügbar:' : 'Contexte Codex indisponible :'} {codexContextError}</div>
               )}
               {codexContextLoading && (
                 <div className="mt-3 text-sm text-amber-200/80">{locale === 'en' ? 'Loading Codex context...' : locale === 'de' ? 'Codex-Kontext wird geladen...' : 'Chargement du contexte Codex...'}</div>
@@ -5533,7 +5532,7 @@ function ChatV3Content() {
                           <span className="text-xs bg-purple-600/30 px-1.5 py-0.5 rounded text-purple-300">@mention</span>
                         )}
                         {!isMainAgent && msg.authorType !== 'sub-agent' && (
-                          <span className="text-xs bg-blue-600/30 px-1.5 py-0.5 rounded text-blue-300">invité</span>
+                          <span className="text-xs bg-blue-600/30 px-1.5 py-0.5 rounded text-blue-300">{locale === 'en' ? 'guest' : locale === 'de' ? 'Gast' : 'invité'}</span>
                         )}
                       </div>
                     )}
@@ -5764,13 +5763,13 @@ function ChatV3Content() {
                       }}
                       className="text-blue-400 hover:text-blue-300 text-sm px-3 py-1 bg-blue-900/30 hover:bg-blue-900/50 rounded transition-colors"
                     >
-                      🔄 Actualiser
+                      {locale === 'en' ? '🔄 Refresh' : locale === 'de' ? '🔄 Aktualisieren' : '🔄 Actualiser'}
                     </button>
                   )}
                   <button
                     onClick={() => setError(null)}
                     className={`${error.messageSent ? 'text-yellow-400 hover:text-yellow-300' : 'text-red-400 hover:text-red-300'} text-sm px-2`}
-                    title="Fermer"
+                    title={locale === 'en' ? 'Close' : locale === 'de' ? 'Schließen' : 'Fermer'}
                   >
                     ✕
                   </button>

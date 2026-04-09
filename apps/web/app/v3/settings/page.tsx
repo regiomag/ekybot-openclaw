@@ -222,7 +222,7 @@ export default function V3SettingsPage() {
   const getAuthHeaders = async (options?: { requireToken?: boolean }): Promise<Record<string, string>> => {
     const accessToken = await getToken();
     if (!accessToken && options?.requireToken) {
-      throw new Error('Session Supabase indisponible');
+      throw new Error(locale === 'en' ? 'Supabase session unavailable' : locale === 'de' ? 'Supabase-Sitzung nicht verfügbar' : 'Session Supabase indisponible');
     }
     return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
   };
@@ -1035,8 +1035,8 @@ export default function V3SettingsPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-2xl border border-gray-600 bg-gray-700/30 px-5 py-4">
               <div>
-                <p className="text-white text-xl font-semibold">💾 Sauvegarder les conversations</p>
-                <p className="text-sm text-gray-400">Garde l&apos;historique de tes échanges</p>
+                <p className="text-white text-xl font-semibold">{locale === 'en' ? '💾 Save conversations' : locale === 'de' ? '💾 Unterhaltungen speichern' : '💾 Sauvegarder les conversations'}</p>
+                <p className="text-sm text-gray-400">{locale === 'en' ? 'Keep your conversation history' : locale === 'de' ? 'Speichert deinen Gesprächsverlauf' : 'Garde l&apos;historique de tes échanges'}</p>
               </div>
               <button
                 type="button"
@@ -1068,15 +1068,15 @@ export default function V3SettingsPage() {
                   <option value={50}>50</option>
                   <option value={100}>100</option>
                   <option value={200}>200</option>
-                  <option value={0}>♾️ Illimité</option>
+                  <option value={0}>{locale === 'en' ? '♾️ Unlimited' : locale === 'de' ? '♾️ Unbegrenzt' : '♾️ Illimité'}</option>
                 </select>
               </div>
             )}
 
             <div className="rounded-2xl border border-gray-600 bg-gray-700/30 px-5 py-4">
               <label className="block text-white text-xl font-semibold mb-2">
-                🤖 Modèle par défaut des crons
-                {modelsLoading && <span className="ml-2 text-sm font-normal text-gray-400">(chargement...)</span>}
+                {locale === 'en' ? '🤖 Default cron model' : locale === 'de' ? '🤖 Standardmodell für Cron-Jobs' : '🤖 Modèle par défaut des crons'}
+                {modelsLoading && <span className="ml-2 text-sm font-normal text-gray-400">{locale === 'en' ? '(loading...)' : locale === 'de' ? '(lädt...)' : '(chargement...)'}</span>}
               </label>
               <select
                 value={cronDefaultModel}
@@ -1548,20 +1548,24 @@ export default function V3SettingsPage() {
             
             <div className="space-y-4">
               <p className="text-sm text-gray-400">
-                Augmentez vos limites avec des add-ons. Tous les add-ons sont facturés mensuellement.
+                {locale === 'en' ? 'Increase your limits with add-ons. All add-ons are billed monthly.' : locale === 'de' ? 'Erhöhe deine Limits mit Add-ons. Alle Add-ons werden monatlich abgerechnet.' : 'Augmentez vos limites avec des add-ons. Tous les add-ons sont facturés mensuellement.'}
               </p>
               
               {/* Agents add-on */}
               <div className="bg-gray-700 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-white font-medium">🤖 Agents supplémentaires</h3>
+                    <h3 className="text-white font-medium">{locale === 'en' ? '🤖 Extra agents' : locale === 'de' ? '🤖 Zusätzliche Agenten' : '🤖 Agents supplémentaires'}</h3>
                     <p className="text-sm text-gray-400">
-                      +1 agent • 2 CHF/mois
+                      {locale === 'en' ? '+1 agent • 2 CHF/month' : locale === 'de' ? '+1 Agent • 2 CHF/Monat' : '+1 agent • 2 CHF/mois'}
                     </p>
                     {addons.agents > 0 && (
                       <p className="text-xs text-blue-400 mt-1">
-                        ✓ {addons.agents} agent{addons.agents > 1 ? 's' : ''} supplémentaire{addons.agents > 1 ? 's' : ''} actif{addons.agents > 1 ? 's' : ''}
+                        {locale === 'en'
+                          ? `✓ ${addons.agents} extra agent${addons.agents > 1 ? 's' : ''} active`
+                          : locale === 'de'
+                            ? `✓ ${addons.agents} zusätzlicher Agent${addons.agents > 1 ? 'en' : ''} aktiv`
+                            : `✓ ${addons.agents} agent${addons.agents > 1 ? 's' : ''} supplémentaire${addons.agents > 1 ? 's' : ''} actif${addons.agents > 1 ? 's' : ''}`}
                       </p>
                     )}
                   </div>
@@ -1570,7 +1574,7 @@ export default function V3SettingsPage() {
                     disabled={addingAgents}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                   >
-                    {addingAgents ? '...' : '+ Ajouter'}
+                    {addingAgents ? '...' : locale === 'en' ? '+ Add' : locale === 'de' ? '+ Hinzufügen' : '+ Ajouter'}
                   </button>
                 </div>
               </div>
@@ -1579,21 +1583,21 @@ export default function V3SettingsPage() {
               <div className="bg-gray-700/50 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-white font-medium">👥 Multi-utilisateurs</h3>
+                    <h3 className="text-white font-medium">{locale === 'en' ? '👥 Multi-user' : locale === 'de' ? '👥 Mehrbenutzer' : '👥 Multi-utilisateurs'}</h3>
                     <p className="text-sm text-gray-400">
-                      Travaillez en équipe • Bientôt disponible
+                      {locale === 'en' ? 'Work as a team • Coming soon' : locale === 'de' ? 'Gemeinsam arbeiten • Bald verfügbar' : 'Travaillez en équipe • Bientôt disponible'}
                     </p>
                   </div>
                   <span className="px-3 py-1 bg-gray-600 text-gray-400 text-sm rounded">
-                    Bientôt
+                    {locale === 'en' ? 'Soon' : locale === 'de' ? 'Bald' : 'Bientôt'}
                   </span>
                 </div>
               </div>
 
               <div className="text-xs text-gray-500">
-                Les add-ons sont ajoutés à votre abonnement actuel et facturés le même jour chaque mois.
+                {locale === 'en' ? 'Add-ons are added to your current subscription and billed on the same day each month.' : locale === 'de' ? 'Add-ons werden zu deinem aktuellen Abo hinzugefügt und jeden Monat am selben Tag abgerechnet.' : 'Les add-ons sont ajoutés à votre abonnement actuel et facturés le même jour chaque mois.'}
                 <br />
-                Gérez vos add-ons via le portail de facturation.
+                {locale === 'en' ? 'Manage your add-ons from the billing portal.' : locale === 'de' ? 'Verwalte deine Add-ons im Abrechnungsportal.' : 'Gérez vos add-ons via le portail de facturation.'}
               </div>
             </div>
           </section>
@@ -1601,7 +1605,7 @@ export default function V3SettingsPage() {
 
         {/* Management Links */}
         <section className="bg-gray-800 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">📁 Gestion</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{locale === 'en' ? '📁 Management' : locale === 'de' ? '📁 Verwaltung' : '📁 Gestion'}</h2>
           
           <div className="space-y-2">
             <Link 
@@ -1611,8 +1615,8 @@ export default function V3SettingsPage() {
               <div className="flex items-center gap-3">
                 <span className="text-2xl">📋</span>
                 <div>
-                  <p className="text-white font-medium">Projets</p>
-                  <p className="text-sm text-gray-400">Gérer les projets et Knowledge Bases</p>
+                  <p className="text-white font-medium">{locale === 'en' ? 'Projects' : locale === 'de' ? 'Projekte' : 'Projets'}</p>
+                  <p className="text-sm text-gray-400">{locale === 'en' ? 'Manage projects and Knowledge Bases' : locale === 'de' ? 'Projekte und Knowledge Bases verwalten' : 'Gérer les projets et Knowledge Bases'}</p>
                 </div>
               </div>
               <span className="text-gray-400">→</span>
@@ -1626,7 +1630,7 @@ export default function V3SettingsPage() {
                 <span className="text-2xl">🤖</span>
                 <div>
                   <p className="text-white font-medium">Agents</p>
-                  <p className="text-sm text-gray-400">Configurer les agents IA</p>
+                  <p className="text-sm text-gray-400">{locale === 'en' ? 'Configure AI agents' : locale === 'de' ? 'KI-Agenten konfigurieren' : 'Configurer les agents IA'}</p>
                 </div>
               </div>
               <span className="text-gray-400">→</span>
@@ -1639,8 +1643,8 @@ export default function V3SettingsPage() {
               <div className="flex items-center gap-3">
                 <span className="text-2xl">💰</span>
                 <div>
-                  <p className="text-white font-medium">Coûts</p>
-                  <p className="text-sm text-gray-400">Suivi des dépenses API</p>
+                  <p className="text-white font-medium">{locale === 'en' ? 'Costs' : locale === 'de' ? 'Kosten' : 'Coûts'}</p>
+                  <p className="text-sm text-gray-400">{locale === 'en' ? 'Track API spend' : locale === 'de' ? 'API-Ausgaben verfolgen' : 'Suivi des dépenses API'}</p>
                 </div>
               </div>
               <span className="text-gray-400">→</span>
@@ -1653,8 +1657,8 @@ export default function V3SettingsPage() {
               <div className="flex items-center gap-3">
                 <span className="text-2xl">🔐</span>
                 <div>
-                  <p className="text-white font-medium">Clés API</p>
-                  <p className="text-sm text-gray-400">Ajouter et gérer les providers IA</p>
+                  <p className="text-white font-medium">{locale === 'en' ? 'API keys' : locale === 'de' ? 'API-Schlüssel' : 'Clés API'}</p>
+                  <p className="text-sm text-gray-400">{locale === 'en' ? 'Add and manage AI providers' : locale === 'de' ? 'KI-Anbieter hinzufügen und verwalten' : 'Ajouter et gérer les providers IA'}</p>
                 </div>
               </div>
               <span className="text-gray-400">→</span>
@@ -1692,7 +1696,7 @@ export default function V3SettingsPage() {
               disabled={isSaving}
               className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-base font-semibold text-white shadow-2xl transition-colors hover:bg-blue-700 disabled:opacity-50"
             >
-              {isSaving ? 'Sauvegarde...' : '💾 Sauvegarder les changements'}
+              {isSaving ? (locale === 'en' ? 'Saving...' : locale === 'de' ? 'Speichern...' : 'Sauvegarde...') : (locale === 'en' ? '💾 Save changes' : locale === 'de' ? '💾 Änderungen speichern' : '💾 Sauvegarder les changements')}
             </button>
           </div>
 
@@ -1702,7 +1706,7 @@ export default function V3SettingsPage() {
               disabled={isSaving}
               className="min-w-[220px] rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-blue-700 disabled:opacity-50"
             >
-              {isSaving ? 'Sauvegarde...' : '💾 Sauvegarder'}
+              {isSaving ? (locale === 'en' ? 'Saving...' : locale === 'de' ? 'Speichern...' : 'Sauvegarde...') : (locale === 'en' ? '💾 Save' : locale === 'de' ? '💾 Speichern' : '💾 Sauvegarder')}
             </button>
           </div>
         </>
