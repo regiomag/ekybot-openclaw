@@ -5238,11 +5238,27 @@ function ChatV3Content() {
                         ))}
                       </select>
                       <div className="mt-2 text-xs text-white/45">
-                        {codexProjectId
-                          ? codexSelectableAgents.some((agent) => agent.projectId === codexProjectId)
-                            ? (locale === 'en' ? 'Agents filtered for the selected project.' : locale === 'de' ? 'Agenten für das ausgewählte Projekt gefiltert.' : 'Agents filtres pour le projet selectionne.')
-                            : (locale === 'en' ? 'No agent is strictly linked to this project on this machine; showing the machine fallback.' : locale === 'de' ? 'Kein Agent ist auf dieser Maschine strikt mit diesem Projekt verknüpft; Maschinen-Fallback wird angezeigt.' : 'Aucun agent strictement lie a ce projet sur cette machine ; affichage du fallback machine.')}
-                          : (locale === 'en' ? 'Choose a project to narrow the workspace agent more precisely.' : locale === 'de' ? 'Wähle ein Projekt, um den Workspace-Agenten genauer einzugrenzen.' : 'Choisis un projet pour restreindre plus finement le workspace agent.')}
+                        {(() => {
+                          if (!codexProjectId) {
+                            return locale === 'en'
+                              ? 'Choose a project to narrow the workspace agent more precisely.'
+                              : locale === 'de'
+                                ? 'Wähle ein Projekt, um den Workspace-Agenten genauer einzugrenzen.'
+                                : 'Choisis un projet pour restreindre plus finement le workspace agent.';
+                          }
+
+                          return codexSelectableAgents.some((agent) => agent.projectId === codexProjectId)
+                            ? (locale === 'en'
+                                ? 'Agents filtered for the selected project.'
+                                : locale === 'de'
+                                  ? 'Agenten für das ausgewählte Projekt gefiltert.'
+                                  : 'Agents filtres pour le projet selectionne.')
+                            : (locale === 'en'
+                                ? 'No agent is strictly linked to this project on this machine; showing the machine fallback.'
+                                : locale === 'de'
+                                  ? 'Kein Agent ist auf dieser Maschine strikt mit diesem Projekt verknüpft; Maschinen-Fallback wird angezeigt.'
+                                  : 'Aucun agent strictement lie a ce projet sur cette machine ; affichage du fallback machine.');
+                        })()}
                       </div>
                     </label>
                   </div>
@@ -5441,7 +5457,7 @@ function ChatV3Content() {
 
                       const rc = ctxSum
                         ? (locale === 'en' ? `🔄 [RESET] Session reset (context limit).\n\n**Pre-reset context:**\n${ctxSum}\n\nPlease continue from this context.` : locale === 'de' ? `🔄 [RESET] Sitzung zurückgesetzt (Kontextlimit).\n\n**Kontext vor dem Reset:**\n${ctxSum}\n\nBitte ab diesem Kontext fortfahren.` : `🔄 [RESET] Session réinitialisée (limite contexte).\n\n**Contexte pré-reset :**\n${ctxSum}\n\nMerci de reprendre à partir de ce contexte.`)
-                        : (locale === 'en' ? '🔄 [RESET] Conversation reset (context limit). Check the history.' : locale === 'de' ? '🔄 [RESET] Gespräch zurückgesetzt (Kontextlimit). Prüfe den Verlauf.' : '🔄 [RESET] Conversation réinitialisée (limite contexte). Consulte l\'historique.')}
+                        : (locale === 'en' ? '🔄 [RESET] Conversation reset (context limit). Check the history.' : locale === 'de' ? '🔄 [RESET] Gespräch zurückgesetzt (Kontextlimit). Prüfe den Verlauf.' : '🔄 [RESET] Conversation réinitialisée (limite contexte). Consulte l\'historique.');
 
                       const resetHeaders = await getAuthHeaders();
                       await fetch('/api/messages', {
@@ -6308,7 +6324,7 @@ export default function ChatV3() {
   return (
     <Suspense fallback={
       <div className="h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">{t('common.loading')}</div>
+        <div className="text-white">Loading...</div>
       </div>
     }>
       <ChatV3Content />
