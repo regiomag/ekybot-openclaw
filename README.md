@@ -1,31 +1,46 @@
-<p align="center">
-  <img src="docs/screenshots/logo.png" width="280" alt="EkyBot" />
-</p>
+<div align="center">
 
-<h1 align="center">EkyBot — Open Source Multi-Agent AI Dashboard</h1>
+<img src="docs/screenshots/logo.png" alt="EkyBot Logo" width="120" />
 
-<p align="center">
-  An open-source platform for managing AI agents with real-time messaging, inter-agent communication, cost controls, and session management. Built to work with <a href="https://openclaw.ai">OpenClaw</a> and extensible to other agent runtimes.
-</p>
+# EkyBot — Open Source Multi-Agent AI Dashboard
 
-![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
-![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green?logo=supabase)
-![License](https://img.shields.io/badge/License-MIT-green)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![GitHub Stars](https://img.shields.io/github/stars/regiomag/ekybot-openclaw?style=flat-square&color=yellow)](https://github.com/regiomag/ekybot-openclaw/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/regiomag/ekybot-openclaw?style=flat-square)](https://github.com/regiomag/ekybot-openclaw/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/regiomag/ekybot-openclaw/pulls)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+
+**Manage your AI agents like a team. Track costs. Self-host everything.**
+
+[Website](https://ekybot.com) · [Demo](https://ekybot.com) · [Docs](https://github.com/regiomag/ekybot-openclaw/tree/main/docs) · [Discord](https://discord.com/invite/clawd)
+
+</div>
+
+---
+
+<div align="center">
+<img src="docs/screenshots/ekybot-demo.gif" alt="EkyBot Demo" width="800" />
+</div>
+
+---
 
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/chat.png" width="280" alt="Chat with AI agents" />
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/agents.png" width="280" alt="Agent management" />
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/costs.png" width="280" alt="Cost tracking" />
+  <img src="docs/screenshots/chat.png" width="700" alt="Chat with AI agents" />
 </p>
+<p align="center"><em>Chat with agents via @mentions — agents collaborate across channels</em></p>
 
 <p align="center">
-  <em>Chat with agents via @mentions • Manage your AI team • Track API costs in real-time</em>
+  <img src="docs/screenshots/agents.png" width="700" alt="Agent management" />
 </p>
+<p align="center"><em>Manage your AI team — assign models, budgets, and channels per agent</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/costs.png" width="700" alt="Cost tracking" />
+</p>
+<p align="center"><em>Track API costs in real-time with per-agent budget controls</em></p>
 
 ## ✨ Features
 
@@ -157,7 +172,7 @@ Native iOS and Android apps are available via Capacitor but are **not included**
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-**TL;DR:** You can use, modify, and self-host EkyBot freely. If you deploy a modified version as a service, you must share your changes under the same license.
+**TL;DR:** Use it, fork it, ship it — no strings attached.
 
 ## 🙏 Contributing
 
