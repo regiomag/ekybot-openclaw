@@ -50,6 +50,8 @@ const MENTION_ALIASES: Record<string, string[]> = {
   'bosco': ['bosko'],
   'invest': ['investment'],
   'max': ['maxx'],
+  'claude-code': ['claude', 'claudecode'],
+  'claude-cowork': ['cowork', 'claudecowork'],
 };
 
 // Build reverse map: alias → canonical name

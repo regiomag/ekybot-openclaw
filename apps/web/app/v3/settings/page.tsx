@@ -24,6 +24,7 @@ function useIsNativeApp(): boolean {
 }
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { ToggleButton } from '../components/ToggleButton';
+import { ClaudeCodeSettings } from '../components/ClaudeCodeSettings';
 import { Header } from '../components/Header';
 import { BugReportModal } from '@/components/BugReportModal';
 import { BottomNav } from '../components/BottomNav';
@@ -967,66 +968,121 @@ export default function V3SettingsPage() {
           </div>
         </div>
 
-        {/* Gateway Configuration */}
+        {/* Claude Code / Cowork Configuration — primary option */}
+        <ClaudeCodeSettings />
+
+        {/* Gateway OpenClaw — collapsible when not configured */}
         <section className="bg-gray-800 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">🔗 Gateway OpenClaw</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">URL du Gateway</label>
-              <input
-                type="url"
-                value={gatewayUrl}
-                onChange={(e) => setGatewayUrl(e.target.value)}
-                placeholder="https://votre-gateway.example.com"
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Token</label>
-              <input
-                type="password"
-                value={gatewayToken}
-                onChange={(e) => setGatewayToken(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            {/* First instructions button */}
-            {gatewayUrl && gatewayToken && (
-              <div className="pt-4 border-t border-gray-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white text-sm">
-                      {t('settingsPage.agentIntro')}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {firstInstructionsSent 
-                        ? t('settingsPage.introSent')
-                        : t('settingsPage.introDesc')}
-                    </p>
+          {gatewayUrl && gatewayToken ? (
+            <>
+              <h2 className="text-lg font-semibold text-white mb-4">🔗 Gateway OpenClaw</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">URL du Gateway</label>
+                  <input
+                    type="url"
+                    value={gatewayUrl}
+                    onChange={(e) => setGatewayUrl(e.target.value)}
+                    placeholder="https://votre-gateway.example.com"
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Token</label>
+                  <input
+                    type="password"
+                    value={gatewayToken}
+                    onChange={(e) => setGatewayToken(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {/* First instructions button */}
+                <div className="pt-4 border-t border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white text-sm">
+                        {t('settingsPage.agentIntro')}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {firstInstructionsSent
+                          ? t('settingsPage.introSent')
+                          : t('settingsPage.introDesc')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleSendFirstInstructions}
+                      disabled={isSendingInstructions}
+                      className={`px-3 py-1.5 rounded text-sm ${
+                        firstInstructionsSent
+                          ? 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      } disabled:opacity-50`}
+                    >
+                      {isSendingInstructions
+                        ? '...'
+                        : firstInstructionsSent
+                          ? t('settingsPage.resend')
+                          : t('settingsPage.send')}
+                    </button>
                   </div>
-                  <button
-                    onClick={handleSendFirstInstructions}
-                    disabled={isSendingInstructions}
-                    className={`px-3 py-1.5 rounded text-sm ${
-                      firstInstructionsSent 
-                        ? 'bg-gray-600 text-gray-300 hover:bg-gray-500' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    } disabled:opacity-50`}
-                  >
-                    {isSendingInstructions 
-                      ? '...' 
-                      : firstInstructionsSent 
-                        ? t('settingsPage.resend')
-                        : t('settingsPage.send')}
-                  </button>
                 </div>
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <details className="group">
+              <summary className="flex items-center justify-between cursor-pointer list-none">
+                <h2 className="text-lg font-semibold text-white">🔗 Gateway OpenClaw</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">Optionnel</span>
+                  <svg className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </summary>
+              <div className="mt-4 space-y-4">
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-xs text-blue-300">
+                    OpenClaw permet d&apos;utiliser des agents API (GPT-4, Claude API, etc.) avec suivi des couts par token.
+                    Si tu utilises uniquement Claude Code/Cowork (abonnement Pro/Max), cette section n&apos;est pas necessaire.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">URL du Gateway</label>
+                  <input
+                    type="url"
+                    value={gatewayUrl}
+                    onChange={(e) => setGatewayUrl(e.target.value)}
+                    placeholder="https://votre-gateway.example.com"
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Token</label>
+                  <input
+                    type="password"
+                    value={gatewayToken}
+                    onChange={(e) => setGatewayToken(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving || !gatewayUrl || !gatewayToken}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isSaving ? '...' : 'Connecter'}
+                  </button>
+                  <a
+                    href="/openclaw-install"
+                    className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                  >
+                    📖 Guide d&apos;installation
+                  </a>
+                </div>
+              </div>
+            </details>
+          )}
         </section>
 
         <section className="bg-gray-800 rounded-lg p-4">

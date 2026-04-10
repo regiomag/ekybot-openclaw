@@ -749,6 +749,7 @@ function ChatV3Content() {
   const [subscription, setSubscription] = useState<{ plan: string; status: string; agentLimit: number } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isGatewayConfigured, setIsGatewayConfigured] = useState<boolean | null>(null); // null = checking
+  const [hasSubscriptionAgents, setHasSubscriptionAgents] = useState<boolean | null>(null); // Claude Code/Cowork active
   const gatewayConfigRef = useRef<{ url: string; token: string } | null>(null); // Store gateway config for sending
   const [showChannelConfig, setShowChannelConfig] = useState(false);
   const [editingChannel, setEditingChannel] = useState<{ key: string; name: string } | null>(null);
@@ -2473,6 +2474,19 @@ function ChatV3Content() {
       });
       loadMainAgent();
       loadSubscription();
+      // Check if user has active subscription agents (Claude Code/Cowork)
+      getAuthHeaders().then(headers => {
+        if (!headers) return;
+        return fetch('/api/claude-code-config', { headers, credentials: 'omit' });
+      }).then(res => res?.ok ? res.json() : null).then(data => {
+        if (data) {
+          setHasSubscriptionAgents(
+            Boolean(data.claudeCode?.enabled) || Boolean(data.claudeCowork?.enabled)
+          );
+        } else {
+          setHasSubscriptionAgents(false);
+        }
+      }).catch(() => setHasSubscriptionAgents(false));
     }, 0);
 
     return () => {
@@ -4306,7 +4320,8 @@ function ChatV3Content() {
     // Enter alone = new line (default textarea behavior)
   };
   
-  if (!authReady || !isInitialized) {
+  // Wait for subscription agent check when gateway is not configured
+  if (!authReady || !isInitialized || (!isDemo && isGatewayConfigured === false && hasSubscriptionAgents === null)) {
     return (
       <div className="h-screen bg-gray-900 flex flex-col">
         {/* Skeleton Header */}
@@ -4344,8 +4359,8 @@ function ChatV3Content() {
     );
   }
   
-  // Welcome screen if gateway not configured (skip in demo mode)
-  if (!isDemo && isGatewayConfigured === false) {
+  // Welcome/onboarding screen — only shown when no gateway AND no subscription agents (Claude Code/Cowork)
+  if (!isDemo && isGatewayConfigured === false && hasSubscriptionAgents === false) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col">
         <Header 

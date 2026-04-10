@@ -13,6 +13,23 @@ import {
 import { publishMessageStreamEvent } from '@/lib/messages-stream';
 import { runRelayMessagePostprocess } from '@/lib/relay-message-postprocess';
 
+// waitUntil keeps the serverless function alive after the response is sent,
+// letting us run postprocess work without blocking the caller.
+let _waitUntil: ((promise: Promise<any>) => void) | null = null;
+try {
+  const vf = require('@vercel/functions');
+  _waitUntil = vf.waitUntil;
+} catch {}
+
+/** Run a promise in the background via waitUntil (Vercel) or fire-and-forget. */
+function bgTask(promise: Promise<any>) {
+  if (_waitUntil) {
+    _waitUntil(promise);
+  } else {
+    promise.catch((err) => console.warn('[relay:bgTask] error:', err?.message));
+  }
+}
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
@@ -168,7 +185,8 @@ async function ensureRelayThreadContext(params: {
   }
 }
 
-// postprocess is now executed sync in the handler — no more QStash fire-and-forget
+// postprocess is deferred via waitUntil — the HTTP response returns immediately
+// after persist + SSE so the daemon never hits the Cloudflare 100s timeout.
 
 export async function POST(
   request: NextRequest,
@@ -481,9 +499,9 @@ export async function POST(
         clearStatus = true;
       }
 
-      let dupPostprocess = { hostSummaryQueued: false };
-      try {
-        dupPostprocess = await runRelayMessagePostprocess({
+      // Defer postprocess — return 200 immediately for duplicate path too
+      bgTask(
+        runRelayMessagePostprocess({
           notificationId,
           messageId: duplicateMessage.id,
           sessionId: session.id,
@@ -495,13 +513,13 @@ export async function POST(
           canQueueAgentAuthoredMentionRelay: Boolean(linkedMachineAgent.ekybotAgentId),
           clearStatus,
           statusMessageId,
-        });
-      } catch (ppErr: any) {
-        logRelayReturn('postprocess_sync_error', {
-          notificationId, messageId: duplicateMessage.id, channelKey, openclawAgentId,
-          error: ppErr?.message || 'unknown',
-        });
-      }
+        }).catch((ppErr: any) => {
+          logRelayReturn('postprocess_bg_error', {
+            notificationId, messageId: duplicateMessage.id, channelKey, openclawAgentId,
+            error: ppErr?.message || 'unknown',
+          });
+        })
+      );
 
       logRelayReturn('duplicate_message_scan', {
         machineId: params.id,
@@ -510,7 +528,7 @@ export async function POST(
         openclawAgentId,
         requestId: meta?.requestId || notification.interAgentTurn?.requestId || null,
         messageId: duplicateMessage.id,
-        postprocessSync: true,
+        postprocessAsync: true,
         dedupeSource: 'relay_return_duplicate_scan',
         sessionId: session.id,
         authorName,
@@ -524,8 +542,7 @@ export async function POST(
         sessionId: session.id,
         channelKey,
         dedupeSource: 'message_scan',
-        hostSummaryQueued: dupPostprocess.hostSummaryQueued,
-        postprocessSync: true,
+        postprocessAsync: true,
       });
     }
 
@@ -614,9 +631,12 @@ export async function POST(
       clearStatus = true;
     }
 
-    let postprocessResult = { hostSummaryQueued: false };
-    try {
-      postprocessResult = await runRelayMessagePostprocess({
+    // ── Fast-path response ──────────────────────────────────────────────
+    // Message is persisted + SSE published → return 200 now.
+    // All remaining work (state machine, host summary, mention relay,
+    // wake push) runs in the background via waitUntil.
+    bgTask(
+      runRelayMessagePostprocess({
         notificationId,
         messageId: message.id,
         sessionId: session.id,
@@ -628,13 +648,13 @@ export async function POST(
         canQueueAgentAuthoredMentionRelay: Boolean(linkedMachineAgent.ekybotAgentId),
         clearStatus,
         statusMessageId,
-      });
-    } catch (ppErr: any) {
-      logRelayReturn('postprocess_sync_error', {
-        notificationId, messageId: message.id, channelKey, openclawAgentId,
-        error: ppErr?.message || 'unknown',
-      });
-    }
+      }).catch((ppErr: any) => {
+        logRelayReturn('postprocess_bg_error', {
+          notificationId, messageId: message.id, channelKey, openclawAgentId,
+          error: ppErr?.message || 'unknown',
+        });
+      })
+    );
 
     return NextResponse.json({
       success: true,
@@ -643,8 +663,7 @@ export async function POST(
       channelKey,
       requestId: meta?.requestId || null,
       mentionId: meta?.mentionId || null,
-      hostSummaryQueued: postprocessResult.hostSummaryQueued,
-      postprocessSync: true,
+      postprocessAsync: true,
       sourceCreatedAt: sourceCreatedAt?.toISOString() || null,
       persistedCreatedAt: persistedCreatedAt.toISOString(),
       effectiveCreatedAt: message.createdAt.toISOString(),
