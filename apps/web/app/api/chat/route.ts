@@ -1972,7 +1972,11 @@ export async function POST(request: NextRequest) {
         console.warn(
           `[Chat] No companion runtime for host agent ${channelAgent.openclawAgentId}; falling back to direct gateway path`
         );
-      } else if (hasContinuityDelayTestMarker(lastUserContent)) {
+      } else if (
+        hasContinuityDelayTestMarker(lastUserContent) ||
+        ['hermes', 'hermes-cli', 'claude-code', 'claude-cowork'].includes(channelAgent?.provider || '')
+      ) {
+        // Companion-dispatched providers: always route via relay (not gateway)
         const hostDispatchContent = withRelayMeta(lastUserContent, {
           v: 1,
           requestId,
